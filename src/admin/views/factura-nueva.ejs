@@ -1,0 +1,53 @@
+<h1>📝 Nueva Factura</h1>
+
+<div class="card">
+  <form id="facturaForm" method="POST" action="/admin/facturas/nuevo">
+    <div class="form-group">
+      <label>Cliente</label>
+      <select name="usuario_id" required>
+        <option value="">Selecciona cliente...</option>
+        <% usuarios.forEach(u => { %>
+          <option value="<%= u.id %>"><%= u.nombre %> (<%= u.cuit %>)</option>
+        <% }); %>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label>Razón Social Cliente</label>
+      <input type="text" name="razon_social_cliente" required placeholder="Ej: Juan Pérez SRL">
+    </div>
+
+    <div class="form-group">
+      <label>Documento Cliente (CUIT/DNI)</label>
+      <input type="text" name="documento_cliente" placeholder="Ej: 20-12345678-9">
+    </div>
+
+    <div class="form-group">
+      <label>Concepto</label>
+      <textarea name="concepto" required placeholder="Descripción del servicio o producto"></textarea>
+    </div>
+
+    <div class="form-group">
+      <label>Importe ($)</label>
+      <input type="number" name="importe" step="0.01" min="0" required placeholder="0.00">
+    </div>
+
+    <button type="submit" class="btn btn-primary">Crear Factura</button>
+    <a href="/admin/facturas" class="btn btn-secondary">Cancelar</a>
+  </form>
+</div>
+
+<style>
+  textarea {
+    resize: vertical;
+    min-height: 100px;
+  }
+
+  .form-group {
+    margin-bottom: 1.5rem;
+  }
+
+  button {
+    margin-right: 0.5rem;
+  }
+</style>

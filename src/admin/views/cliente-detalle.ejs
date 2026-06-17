@@ -1,0 +1,86 @@
+<a href="/admin/clientes" class="btn btn-secondary">&larr; Volver</a>
+
+<h1><%= usuario.nombre || 'Cliente Sin Nombre' %></h1>
+
+<div class="cliente-datos">
+  <div class="card">
+    <div class="card-header">Información General</div>
+    <div class="card-body">
+      <p><strong>Teléfono:</strong> <%= usuario.numero_telefono %></p>
+      <p><strong>CUIT:</strong> <%= usuario.cuit || '-' %></p>
+      <p><strong>Razón Social:</strong> <%= usuario.razon_social || '-' %></p>
+      <p><strong>Domicilio:</strong> <%= usuario.domicilio || '-' %></p>
+      <p><strong>Condición IVA:</strong> <%= usuario.condicion_iva || '-' %></p>
+      <p><strong>Plan:</strong> <%= usuario.plan.toUpperCase() %></p>
+      <p><strong>Estado:</strong> <span class="badge <%= usuario.activo ? 'badge-success' : 'badge-danger' %>"><%= usuario.activo ? 'Activo' : 'Inactivo' %></span></p>
+      <p><strong>Vencimiento:</strong> <%= usuario.fecha_vencimiento ? new Date(usuario.fecha_vencimiento * 1000).toLocaleDateString('es-AR') : '-' %></p>
+      <p><strong>Facturas del Mes:</strong> <%= usuario.facturas_mes_actual %>/<%= usuario.limite_facturas_mes === -1 ? 'Ilimitado' : usuario.limite_facturas_mes %></p>
+    </div>
+  </div>
+
+  <div class="acciones">
+    <form method="POST" action="/admin/clientes/<%= usuario.id %>/activar" style="display: inline;">
+      <button class="btn <%= usuario.activo ? 'btn-danger' : 'btn-success' %>" type="submit">
+        <%= usuario.activo ? '🚫 Desactivar' : '✅ Activar' %>
+      </button>
+    </form>
+
+    <form method="POST" action="/admin/clientes/<%= usuario.id %>/extender" style="display: inline;">
+      <input type="hidden" name="dias" value="30">
+      <button class="btn btn-primary" type="submit">
+        📅 Extender 30 Días
+      </button>
+    </form>
+  </div>
+</div>
+
+<h2>📄 Últimas Facturas</h2>
+<% if (ultimasFacturas && ultimasFacturas.length > 0) { %>
+<table class="table">
+  <thead>
+    <tr>
+      <th>Número</th>
+      <th>Fecha</th>
+      <th>Cliente</th>
+      <th>Importe</th>
+      <th>CAE</th>
+    </tr>
+  </thead>
+  <tbody>
+    <% ultimasFacturas.forEach(factura => { %>
+    <tr>
+      <td><%= factura.numero_factura %></td>
+      <td><%= new Date(factura.creado_en * 1000).toLocaleDateString('es-AR') %></td>
+      <td><%= factura.razon_social_cliente %></td>
+      <td>$<%= factura.importe %></td>
+      <td><code><%= factura.cae %></code></td>
+    </tr>
+    <% }); %>
+  </tbody>
+</table>
+<% } else { %>
+<p>Sin facturas registradas</p>
+<% } %>
+
+<style>
+  .cliente-datos {
+    margin: 30px 0;
+  }
+
+  .acciones {
+    margin: 20px 0;
+    display: flex;
+    gap: 10px;
+  }
+
+  .acciones form {
+    display: inline;
+  }
+
+  code {
+    background: #f5f5f5;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: monospace;
+  }
+</style>

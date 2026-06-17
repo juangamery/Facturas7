@@ -1,0 +1,13 @@
+[build]
+builder = "nixpacks"
+
+[build.nixpacks]
+# Instalar ffmpeg necesario para convertir audio .ogg a .mp3
+packages = ["ffmpeg"]
+
+[env]
+PORT = "3000"
+
+[deploy]
+# Comando para iniciar la aplicación
+startCommand = "npm start"

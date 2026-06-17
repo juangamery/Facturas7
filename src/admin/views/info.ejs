@@ -1,0 +1,227 @@
+<style>
+  body {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+  }
+
+  .navbar {
+    background: transparent;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  }
+
+  .container {
+    color: white;
+  }
+
+  .hero {
+    text-align: center;
+    padding: 60px 20px;
+  }
+
+  .hero h1 {
+    font-size: 48px;
+    margin-bottom: 20px;
+    color: white;
+  }
+
+  .hero p {
+    font-size: 18px;
+    opacity: 0.95;
+    max-width: 600px;
+    margin: 0 auto 30px;
+  }
+
+  .cta-buttons {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .btn-cta {
+    padding: 15px 30px;
+    font-size: 16px;
+    font-weight: bold;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+  }
+
+  .btn-primary-cta {
+    background: white;
+    color: #667eea;
+  }
+
+  .btn-primary-cta:hover {
+    opacity: 0.9;
+  }
+
+  .btn-secondary-cta {
+    background: transparent;
+    color: white;
+    border: 2px solid white;
+  }
+
+  .btn-secondary-cta:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .features {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 30px;
+    margin: 60px 0;
+  }
+
+  .feature {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 30px;
+    border-radius: 10px;
+    backdrop-filter: blur(10px);
+  }
+
+  .feature h3 {
+    font-size: 22px;
+    margin-bottom: 15px;
+  }
+
+  .pricing {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 30px;
+    margin: 60px 0;
+  }
+
+  .pricing-card {
+    background: white;
+    color: #333;
+    padding: 30px;
+    border-radius: 10px;
+    text-align: center;
+  }
+
+  .pricing-card h3 {
+    color: #667eea;
+    margin-bottom: 15px;
+  }
+
+  .price {
+    font-size: 32px;
+    font-weight: bold;
+    color: #667eea;
+    margin: 15px 0;
+  }
+
+  .price-period {
+    color: #666;
+    font-size: 14px;
+  }
+
+  .features-list {
+    text-align: left;
+    margin: 20px 0;
+  }
+
+  .features-list li {
+    margin: 10px 0;
+    color: #666;
+  }
+
+  .footer {
+    background: rgba(0, 0, 0, 0.2);
+    color: white;
+  }
+</style>
+
+<div class="hero">
+  <h1>📱 Facturación por WhatsApp</h1>
+  <p>Emite facturas electrónicas válidas ante AFIP directamente desde WhatsApp. Simple, rápido y seguro.</p>
+
+  <div class="cta-buttons">
+    <a href="https://wa.me/549XXXXXXXXX?text=Hola%20quiero%20info%20sobre%20el%20servicio" class="btn-cta btn-primary-cta">
+      💬 Contáctanos
+    </a>
+    <a href="#planes" class="btn-cta btn-secondary-cta">
+      Ver Planes
+    </a>
+  </div>
+</div>
+
+<div class="features">
+  <div class="feature">
+    <h3>📝 Facturas en Segundos</h3>
+    <p>Escribe o toma foto de los datos. El bot se encarga del resto.</p>
+  </div>
+
+  <div class="feature">
+    <h3>✅ Válidas ante AFIP</h3>
+    <p>Todas las facturas son 100% válidas. CAE automático incluido.</p>
+  </div>
+
+  <div class="feature">
+    <h3>🎤 Voz y Texto</h3>
+    <p>Dicta, escribe, o escanea. El bot entiende todo.</p>
+  </div>
+
+  <div class="feature">
+    <h3>📊 Panel de Control</h3>
+    <p>Ve todas tus facturas, clientes y estadísticas en un lugar.</p>
+  </div>
+
+  <div class="feature">
+    <h3>💳 Pago Automático</h3>
+    <p>Suscripciones mensuales sin complicaciones. Tarjeta o débito.</p>
+  </div>
+
+  <div class="feature">
+    <h3>🔐 Seguro y Privado</h3>
+    <p>Encriptado end-to-end. Tus datos son tuyos.</p>
+  </div>
+</div>
+
+<h2 id="planes">💰 Planes</h2>
+
+<div class="pricing">
+  <div class="pricing-card">
+    <h3>Básico</h3>
+    <div class="price">$299<span class="price-period">/mes</span></div>
+    <ul class="features-list">
+      <li>✅ 100 facturas/mes</li>
+      <li>✅ Acceso a panel admin</li>
+      <li>✅ Soporte por email</li>
+      <li>✅ Facturas C (Consumidor Final)</li>
+    </ul>
+    <a href="#" class="btn-cta btn-primary-cta">Contratar</a>
+  </div>
+
+  <div class="pricing-card">
+    <h3>Premium</h3>
+    <div class="price">$599<span class="price-period">/mes</span></div>
+    <ul class="features-list">
+      <li>✅ Facturas ilimitadas</li>
+      <li>✅ Acceso a panel admin</li>
+      <li>✅ Soporte prioritario</li>
+      <li>✅ Todos los tipos de comprobantes</li>
+      <li>✅ API para integración</li>
+    </ul>
+    <a href="#" class="btn-cta btn-primary-cta">Contratar</a>
+  </div>
+</div>
+
+<h2>❓ Preguntas Frecuentes</h2>
+
+<div class="faq">
+  <h3>¿Es legal?</h3>
+  <p>Sí. Todas las facturas son emitidas a través de AFIP y son 100% válidas legalmente.</p>
+
+  <h3>¿Qué información necesito?</h3>
+  <p>Tu CUIT, razón social, domicilio y punto de venta en ARCA. El bot te guía en el onboarding.</p>
+
+  <h3>¿Qué tipos de comprobantes emite?</h3>
+  <p>Principalmente Facturas C (Consumidor Final). Plan Premium incluye Facturas A y B.</p>
+
+  <h3>¿Puedo probar antes?</h3>
+  <p>Sí. Ofrecemos período de prueba de 7 días. Contáctanos.</p>
+</div>

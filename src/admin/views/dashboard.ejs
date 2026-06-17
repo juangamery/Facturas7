@@ -1,0 +1,93 @@
+<div class="container">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+    <h1>📊 Dashboard</h1>
+    <a href="/admin/clientes/nuevo" class="btn btn-primary">+ Nuevo Cliente</a>
+  </div>
+
+  <!-- STATS GRID -->
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-number"><%= usuariosActivos || 0 %></div>
+      <div class="stat-label">Usuarios Activos</div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-number"><%= usuariosVencidos || 0 %></div>
+      <div class="stat-label">Vencidos</div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-number"><%= facturasHoy || 0 %></div>
+      <div class="stat-label">Facturas Hoy</div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-number"><%= facturasDelMes || 0 %></div>
+      <div class="stat-label">Facturas Mes</div>
+    </div>
+  </div>
+
+  <!-- PRÓXIMOS A VENCER -->
+  <div class="card">
+    <div class="card-header">⏰ Próximos a Vencer (7 días)</div>
+    <div class="card-body">
+      <% if (proximosAVencer && proximosAVencer.length > 0) { %>
+      <ul style="list-style: none; padding: 0;">
+        <% proximosAVencer.forEach(usuario => { %>
+        <li style="padding: 1rem; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <strong style="color: #1f2937;"><%= usuario.nombre %></strong>
+            <p style="font-size: 0.875rem; color: #6b7280; margin-top: 0.25rem;">
+              Vence: <%= new Date(usuario.fecha_vencimiento * 1000).toLocaleDateString('es-AR') %>
+            </p>
+          </div>
+          <a href="/admin/clientes/<%= usuario.id %>" class="btn btn-secondary" style="font-size: 0.875rem;">Ver</a>
+        </li>
+        <% }); %>
+      </ul>
+      <% } else { %>
+      <div class="empty-state">
+        <p style="margin: 0; color: #6b7280;">✅ Sin usuarios próximos a vencer</p>
+      </div>
+      <% } %>
+    </div>
+  </div>
+
+  <!-- ÚLTIMAS FACTURAS -->
+  <div class="card" style="margin-top: 2rem;">
+    <div class="card-header">📄 Últimas Facturas</div>
+    <div class="card-body">
+      <% if (ultimasFacturas && ultimasFacturas.length > 0) { %>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Cliente</th>
+            <th>Número</th>
+            <th>Importe</th>
+            <th>Fecha</th>
+            <th>CAE</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% ultimasFacturas.forEach(f => { %>
+          <tr>
+            <td style="font-weight: 500;"><%= f.nombre %></td>
+            <td><code><%= f.numero_factura %></code></td>
+            <td style="font-weight: 600; color: #059669;">$<%= f.importe.toLocaleString('es-AR') %></td>
+            <td><%= new Date(f.creado_en * 1000).toLocaleDateString('es-AR') %></td>
+            <td><code style="font-size: 0.75rem;"><%= f.cae.substring(0, 10) %>...</code></td>
+          </tr>
+          <% }); %>
+        </tbody>
+      </table>
+      <% } else { %>
+      <div class="empty-state">
+        <div class="empty-state-icon">📄</div>
+        <h3>Sin facturas registradas</h3>
+        <p>Crea tu primer cliente y emite una factura por WhatsApp.</p>
+        <a href="/admin/clientes" class="btn btn-primary">Ver Clientes</a>
+      </div>
+      <% } %>
+    </div>
+  </div>
+</div>

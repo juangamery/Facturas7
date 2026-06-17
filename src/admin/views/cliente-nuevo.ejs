@@ -1,0 +1,82 @@
+<a href="/admin/clientes" class="btn btn-secondary">&larr; Volver</a>
+
+<h1>➕ Nuevo Cliente</h1>
+
+<div class="card">
+  <form method="POST" action="/admin/clientes/nuevo">
+    <div class="form-group">
+      <label for="nombre">Nombre / Razón Social *</label>
+      <input type="text" id="nombre" name="nombre" required>
+    </div>
+
+    <div class="form-group">
+      <label for="numero_telefono">Número de WhatsApp *</label>
+      <input type="text" id="numero_telefono" name="numero_telefono" placeholder="54911XXXXXXXXX" required>
+      <small>Formato: 54911XXXXXXXXX (con código de país)</small>
+    </div>
+
+    <div class="form-group">
+      <label for="cuit">CUIT</label>
+      <input type="text" id="cuit" name="cuit" placeholder="20-12345678-9">
+    </div>
+
+    <div class="form-group">
+      <label for="razon_social">Razón Social</label>
+      <input type="text" id="razon_social" name="razon_social">
+    </div>
+
+    <div class="form-group">
+      <label for="plan">Plan *</label>
+      <select id="plan" name="plan" required>
+        <option value="basico">Básico ($299/mes - 100 facturas)</option>
+        <option value="premium">Premium ($599/mes - Ilimitado)</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label>
+        <input type="checkbox" name="enviar_bienvenida" checked>
+        Enviar mensaje de bienvenida por WhatsApp
+      </label>
+    </div>
+
+    <button type="submit" class="btn btn-success">Crear Cliente</button>
+    <a href="/admin/clientes" class="btn btn-secondary">Cancelar</a>
+  </form>
+</div>
+
+<style>
+  .card {
+    max-width: 500px;
+    margin: 20px 0;
+  }
+
+  select {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    font-size: 14px;
+  }
+
+  small {
+    display: block;
+    color: #666;
+    margin-top: 5px;
+  }
+
+  label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: normal;
+  }
+
+  label input[type="checkbox"] {
+    width: auto;
+  }
+
+  button {
+    margin-right: 10px;
+  }
+</style>
