@@ -19,7 +19,7 @@ import { inicializarDB, limpiarDatos, getDB, actualizarUsuario } from './db.js';
 import { logger } from './logger.js';
 import webhookWhatsApp from './bot/webhook.js';
 import adminRoutes from './admin/routes.js';
-import webhoookMercadoPago from './mercadopago/webhook.js';
+import { handleMercadoPagoWebhook } from './mercadopago/webhook.js';
 import { handleEvolutionWebhook } from './evolution/webhook.js';
 
 // Configurar rutas (compatibilidad con ES modules)
@@ -76,7 +76,7 @@ app.post('/webhooks/evolution', handleEvolutionWebhook);
 
 // Webhook de Mercado Pago (POST /webhooks/mercadopago)
 // MP manda acá eventos de pagos aprobados, rechazados, etc
-app.post('/webhooks/mercadopago', webhoookMercadoPago);
+app.post('/webhooks/mercadopago', handleMercadoPagoWebhook);
 
 // Panel admin (todas las rutas /admin/*)
 // Rutas públicas: /admin/login, /admin/info
