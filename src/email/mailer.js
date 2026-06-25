@@ -37,7 +37,10 @@ export async function enviarFacturaEmail(destinatario, nombreArchivo, rutaPDF) {
     logger.info(`📧 Email enviado a ${destinatario}: ${info.messageId}`);
     return true;
   } catch (error) {
-    logger.error(`Error enviando email a ${destinatario}: ${error.message}`);
+    logger.error(`Error enviando email a ${destinatario}`);
+    logger.error(`  Código: ${error.code}`);
+    logger.error(`  Mensaje: ${error.message}`);
+    logger.error(`  Response: ${error.response}`);
     return false;
   }
 }
