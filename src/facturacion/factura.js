@@ -71,8 +71,7 @@ export async function obtenerUltimoComprobante(cuit, puntoVenta) {
 // SOLICITAR CAE (Código de Autorización Electrónica)
 // ==========================================
 
-export async function solicitarCAE(datosFact
-ura) {
+export async function solicitarCAE(datosFactura) {
   try {
     // Reintentar 2 veces si falla (red inestable)
     let intento = 0;
@@ -80,31 +79,21 @@ ura) {
 
     while (intento < 3) {
       try {
-        const cuitNumerico = datosFact
-ura.cuit.replace(/-/g, '');
-        const tipoComp = TIPO_COMPROBANTE[datosFact
-ura.tipoComprobante || 'Factura C'];
-        const tipoDocRec = getTipoDocumento(datosFact
-ura.documento_cliente);
-        const nroDocRec = parsearDocumento(datosFact
-ura.documento_cliente);
+        const cuitNumerico = datosFactura.cuit.replace(/-/g, '');
+        const tipoComp = TIPO_COMPROBANTE[datosFactura.tipoComprobante || 'Factura C'];
+        const tipoDocRec = getTipoDocumento(datosFactura.documento_cliente);
+        const nroDocRec = parsearDocumento(datosFactura.documento_cliente);
 
         const payload = {
-          punto_venta: datosFact
-ura.punto_venta,
+          punto_venta: datosFactura.punto_venta,
           tipo_comprobante: tipoComp,
-          fecha_emision: datosFact
-ura.fecha_emision,
-          razon_social_receptor: datosFact
-ura.razon_social_cliente,
+          fecha_emision: datosFactura.fecha_emision,
+          razon_social_receptor: datosFactura.razon_social_cliente,
           tipo_documento_receptor: tipoDocRec,
           numero_documento_receptor: nroDocRec,
-          concepto: datosFact
-ura.concepto,
-          importe_total: datosFact
-ura.importe,
-          condicion_iva_receptor: datosFact
-ura.condicion_iva_cliente || '5' // 5 = Consumidor final
+          concepto: datosFactura.concepto,
+          importe_total: datosFactura.importe,
+          condicion_iva_receptor: datosFactura.condicion_iva_cliente || '5' // 5 = Consumidor final
         };
 
         const response = await axios.post(

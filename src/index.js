@@ -21,6 +21,8 @@ import webhookWhatsApp from './bot/webhook.js';
 import adminRoutes from './admin/routes.js';
 import { handleMercadoPagoWebhook } from './mercadopago/webhook.js';
 import { handleEvolutionWebhook } from './evolution/webhook.js';
+import { inicializarMailer } from './email/mailer.js';
+import { inicializarReceiver } from './email/receiver.js';
 
 // Configurar rutas (compatibilidad con ES modules)
 const __filename = fileURLToPath(import.meta.url);
@@ -47,6 +49,7 @@ app.use(express.static(path.join(__dirname, '../public')));
 // Configurar vista con EJS
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'admin/views'));
+app.set('view cache', false); // Deshabilitar caché para desarrollo
 
 // Sesiones para el panel admin
 app.use(session({
@@ -121,7 +124,17 @@ async function iniciar() {
     // 4. Avisar a clientes vencidos (cada día a las 10:00 AM)
     avisarClientesVencidos();
 
-    // 5. Iniciar servidor Express
+    // 5. Email service (Nodemailer + IMAP)
+    try {
+      inicializarMailer();
+      logger.info('Inicializando Email Receiver...');
+      inicializarReceiver();
+      logger.info('Email service listo ✅');
+    } catch (error) {
+      logger.warn(`Email service no disponible: ${error.message}`);
+    }
+
+    // 6. Iniciar servidor Express
     app.listen(PORT, () => {
       logger.info(`🚀 Servidor corriendo en ${BASE_URL}`);
       logger.info(`📊 Panel admin: ${BASE_URL}/admin/login`);

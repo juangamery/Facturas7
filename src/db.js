@@ -148,6 +148,16 @@ export async function inicializarDB() {
       )
     `);
 
+    // Agregar columna email a usuarios (si no existe)
+    try {
+      db.exec(`
+        ALTER TABLE usuarios ADD COLUMN email TEXT UNIQUE
+      `);
+      logger.info('✅ Columna email agregada a usuarios');
+    } catch (e) {
+      // Columna ya existe, no hacer nada
+    }
+
     logger.info('✅ Tablas de BD creadas/verificadas');
 
   } catch (error) {

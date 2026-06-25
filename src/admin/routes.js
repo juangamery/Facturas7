@@ -18,6 +18,7 @@ import {
 import { logger, logearError } from '../logger.js';
 import { validarCUIT, validarDocumento, validarImporte } from '../facturacion/validaciones.js';
 import { generarPDFFactura } from '../facturacion/pdf.js';
+import { conectarReceiver } from '../email/receiver.js';
 
 const router = express.Router();
 
@@ -48,6 +49,272 @@ router.get('/', (req, res) => {
     res.redirect('/admin/dashboard');
   } else {
     res.redirect('/admin/login');
+  }
+});
+
+// GET /admin/stats - Endpoint público con stats (JSON)
+router.get('/stats', (req, res) => {
+  try {
+    const db = getDB();
+
+    const usuariosActivos = db.prepare(
+      'SELECT COUNT(*) as count FROM usuarios WHERE activo = 1'
+    ).get();
+
+    const usuariosVencidos = db.prepare(
+      `SELECT COUNT(*) as count FROM usuarios
+       WHERE activo = 1 AND fecha_vencimiento < strftime('%s', 'now')`
+    ).get();
+
+    const facturasHoy = db.prepare(
+      `SELECT COUNT(*) as count FROM facturas
+       WHERE DATE(datetime(creado_en, 'unixepoch')) = DATE('now')`
+    ).get();
+
+    const facturasDelMes = db.prepare(
+      `SELECT COUNT(*) as count FROM facturas
+       WHERE strftime('%Y-%m', datetime(creado_en, 'unixepoch')) = strftime('%Y-%m', 'now')`
+    ).get();
+
+    const ultimasFacturas = db.prepare(
+      `SELECT f.*, u.nombre FROM facturas f
+       JOIN usuarios u ON f.usuario_id = u.id
+       ORDER BY f.creado_en DESC LIMIT 10`
+    ).all();
+
+    res.json({
+      usuariosActivos: usuariosActivos.count,
+      usuariosVencidos: usuariosVencidos.count,
+      facturasHoy: facturasHoy.count,
+      facturasDelMes: facturasDelMes.count,
+      ultimasFacturas
+    });
+
+  } catch (error) {
+    logearError(error, 'Stats públicos');
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /admin/facturas-json - Endpoint público lista facturas (JSON)
+router.get('/facturas-json', (req, res) => {
+  try {
+    const db = getDB();
+    const busqueda = req.query.q || '';
+
+    let query = `
+      SELECT f.*, u.nombre FROM facturas f
+      JOIN usuarios u ON f.usuario_id = u.id
+      WHERE 1=1
+    `;
+    const params = [];
+
+    if (busqueda) {
+      query += ' AND (u.nombre LIKE ? OR f.numero_factura LIKE ?)';
+      params.push(`%${busqueda}%`, `%${busqueda}%`);
+    }
+
+    query += ' ORDER BY f.creado_en DESC';
+    const facturas = db.prepare(query).all(...params);
+
+    res.json({ facturas });
+
+  } catch (error) {
+    logearError(error, 'Facturas JSON');
+    res.status(500).json({ error: error.message, facturas: [] });
+  }
+});
+
+// GET /admin/clientes-json - Endpoint público lista clientes (JSON)
+router.get('/clientes-json', (req, res) => {
+  try {
+    const db = getDB();
+    const busqueda = req.query.q || '';
+
+    let query = 'SELECT * FROM usuarios WHERE 1=1';
+    const params = [];
+
+    if (busqueda) {
+      query += ' AND (nombre LIKE ? OR cuit LIKE ?)';
+      params.push(`%${busqueda}%`, `%${busqueda}%`);
+    }
+
+    query += ' ORDER BY nombre ASC';
+    const usuarios = db.prepare(query).all(...params);
+
+    res.json({ usuarios });
+
+  } catch (error) {
+    logearError(error, 'Clientes JSON');
+    res.status(500).json({ error: error.message, usuarios: [] });
+  }
+});
+
+// GET /admin/facturas-descargar/:id - Descargar PDF (PÚBLICO)
+router.get('/facturas-descargar/:id', (req, res) => {
+  try {
+    const db = getDB();
+    const factura = db.prepare('SELECT pdf_path, numero_factura FROM facturas WHERE id = ?').get(req.params.id);
+
+    if (!factura || !factura.pdf_path) {
+      return res.status(404).json({ error: 'PDF no encontrado' });
+    }
+
+    const fs = require('fs');
+    if (!fs.existsSync(factura.pdf_path)) {
+      return res.status(404).json({ error: 'Archivo no existe' });
+    }
+
+    res.download(factura.pdf_path, `Factura_${factura.numero_factura}.pdf`);
+  } catch (error) {
+    logearError(error, 'Descargar PDF');
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /admin/clientes-nuevo - Crear cliente (PÚBLICO)
+router.post('/clientes-nuevo', (req, res) => {
+  try {
+    const { nombre, numero_telefono, cuit, razon_social, plan, email } = req.body;
+    const db = getDB();
+
+    if (!nombre || !numero_telefono) {
+      return res.status(400).json({ error: 'Nombre y teléfono son obligatorios' });
+    }
+
+    if (cuit && !validarCUIT(cuit)) {
+      return res.status(400).json({ error: 'CUIT inválido' });
+    }
+
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: 'Email inválido' });
+    }
+
+    const ahora = Math.floor(Date.now() / 1000);
+    const vencimiento = ahora + (30 * 24 * 60 * 60);
+
+    const stmt = db.prepare(`
+      INSERT INTO usuarios (nombre, numero_telefono, cuit, razon_social, plan, email,
+                           fecha_vencimiento, activo, fecha_registro)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    stmt.run(
+      nombre,
+      numero_telefono,
+      cuit || null,
+      razon_social || null,
+      plan || 'basico',
+      email || null,
+      vencimiento,
+      1,
+      ahora
+    );
+
+    logger.info(`Cliente ${nombre} creado`);
+    res.json({ success: true, message: 'Cliente creado' });
+
+  } catch (error) {
+    logearError(error, 'Crear cliente');
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /admin/facturas-nuevo - Crear factura (PÚBLICO)
+router.post('/facturas-nuevo', async (req, res) => {
+  try {
+    const { usuario_id, documento_cliente, razon_social_cliente, concepto, importe } = req.body;
+    const db = getDB();
+
+    const usuario = db.prepare('SELECT * FROM usuarios WHERE id = ?').get(usuario_id);
+    if (!usuario) {
+      return res.status(400).json({ error: 'Cliente no encontrado' });
+    }
+
+    if (!razon_social_cliente || !concepto || !importe) {
+      return res.status(400).json({ error: 'Faltan campos obligatorios' });
+    }
+
+    const importeNum = parseFloat(importe);
+    if (isNaN(importeNum) || importeNum <= 0) {
+      return res.status(400).json({ error: 'Importe debe ser mayor a 0' });
+    }
+
+    const ahora = Math.floor(Date.now() / 1000);
+    const numero = `${ahora}`;
+
+    let pdfPath = '';
+    try {
+      pdfPath = await generarPDFFactura({
+        numero_factura: numero,
+        fecha_emision: new Date().toISOString().split('T')[0],
+        razon_social_cliente,
+        documento_cliente: documento_cliente || 'CF',
+        domicilio_cliente: usuario.domicilio || '',
+        razon_social_emisor: usuario.razon_social,
+        cuit_emisor: usuario.cuit,
+        domicilio_emisor: usuario.domicilio,
+        condicion_iva: usuario.condicion_iva,
+        concepto,
+        importe: importeNum,
+        tipo_comprobante: 'Factura C',
+        punto_venta: usuario.punto_venta || 1,
+        cae: 'PENDIENTE'
+      });
+    } catch (pdfError) {
+      logger.warn(`No se generó PDF: ${pdfError.message}`);
+    }
+
+    const stmt = db.prepare(`
+      INSERT INTO facturas (usuario_id, numero_telefono, fecha_emision, tipo_comprobante, numero_factura,
+                           razon_social_cliente, documento_cliente, concepto, importe, cae, vencimiento_cae,
+                           pdf_path, origen, creado_en)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    stmt.run(
+      usuario.id,
+      usuario.numero_telefono,
+      new Date().toISOString().split('T')[0],
+      'Factura C',
+      numero,
+      razon_social_cliente,
+      documento_cliente || 'CF',
+      concepto,
+      importeNum,
+      'PENDIENTE',
+      '',
+      pdfPath,
+      'admin',
+      ahora
+    );
+
+    logger.info(`Factura ${numero} creada`);
+    res.json({ success: true, numero, pdfPath });
+
+  } catch (error) {
+    logearError(error, 'Crear factura');
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /admin/email-procesar - Procesar email manualmente (PÚBLICO)
+router.post('/email-procesar', async (req, res) => {
+  try {
+    const { cuit, email } = req.body;
+
+    if (!cuit || !email) {
+      return res.status(400).json({ error: 'Falta CUIT o email' });
+    }
+
+    const { procesarEmailManual } = await import('../email/receiver.js');
+    const resultado = await procesarEmailManual(cuit, email);
+
+    res.json(resultado);
+
+  } catch (error) {
+    logearError(error, 'Procesar email');
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -500,6 +767,18 @@ router.post('/comprobantes/:id/rechazar', async (req, res) => {
 
   } catch (error) {
     logearError(error, 'Rechazar comprobante');
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /admin/email-procesar - Procesar emails pendientes manualmente
+router.post('/email-procesar', (req, res) => {
+  try {
+    conectarReceiver();
+    logger.info('📧 Email receiver triggered');
+    res.json({ success: true, message: 'Procesando emails...' });
+  } catch (error) {
+    logearError(error, 'Procesar emails');
     res.status(500).json({ error: error.message });
   }
 });

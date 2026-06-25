@@ -5,8 +5,6 @@ export default function Comprobantes() {
   const [comprobantes, setComprobantes] = useState([])
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
-  const [razonRechazo, setRazonRechazo] = useState('')
-  const [selectedId, setSelectedId] = useState(null)
 
   useEffect(() => {
     fetchComprobantes()
@@ -17,7 +15,7 @@ export default function Comprobantes() {
       const res = await axios.get('/admin/comprobantes')
       setComprobantes(res.data.comprobantes || [])
     } catch (error) {
-      setMessage('Error cargando comprobantes')
+      console.error('Error:', error)
     } finally {
       setLoading(false)
     }
@@ -25,83 +23,74 @@ export default function Comprobantes() {
 
   const aprobar = async (id) => {
     try {
-      await axios.post(`/admin/comprobantes/${id}/aprobar`, {
-        verificado_por: 'admin'
-      })
-      setMessage('✓ Comprobante aprobado')
+      await axios.post(`/admin/comprobantes/${id}/aprobar`, { verificado_por: 'admin' })
+      setMessage('✓ Aprobado')
       fetchComprobantes()
       setTimeout(() => setMessage(''), 3000)
     } catch (error) {
-      setMessage('Error al aprobar')
+      setMessage('✗ Error')
     }
   }
 
   const rechazar = async (id) => {
-    if (!razonRechazo) {
-      setMessage('Ingresa razón de rechazo')
-      return
-    }
     try {
       await axios.post(`/admin/comprobantes/${id}/rechazar`, {
-        razon: razonRechazo,
+        razon: 'Rechazado',
         verificado_por: 'admin'
       })
-      setMessage('✓ Comprobante rechazado')
-      setRazonRechazo('')
-      setSelectedId(null)
+      setMessage('✓ Rechazado')
       fetchComprobantes()
       setTimeout(() => setMessage(''), 3000)
     } catch (error) {
-      setMessage('Error al rechazar')
+      setMessage('✗ Error')
     }
   }
 
-  const formatDate = (timestamp) => {
-    return new Date(timestamp * 1000).toLocaleDateString('es-AR')
-  }
-
   return (
-    <div className="container mt-4">
-      <h1>📋 Comprobantes de Pago</h1>
+    <div>
+      <h1 className="text-4xl font-bold text-white mb-2">Comprobantes</h1>
+      <p className="text-slate-400 mb-8">{comprobantes.length} pendientes de verificar</p>
 
-      {message && <div className={`alert alert-${message.includes('✓') ? 'success' : 'danger'}`}>{message}</div>}
+      {message && (
+        <div className={`mb-6 p-4 rounded-lg ${message.includes('✓') ? 'bg-green-900/30 text-green-400 border border-green-800' : 'bg-red-900/30 text-red-400 border border-red-800'}`}>
+          {message}
+        </div>
+      )}
 
       {loading ? (
-        <p>Cargando...</p>
+        <div className="text-slate-400">Cargando...</div>
       ) : comprobantes.length > 0 ? (
-        <div className="table-responsive">
-          <table className="table table-hover">
-            <thead className="table-light">
+        <div className="rounded-lg border border-slate-700 bg-slate-800/50 backdrop-blur overflow-hidden">
+          <table className="w-full">
+            <thead className="border-b border-slate-700 bg-slate-800/70">
               <tr>
-                <th>WhatsApp</th>
-                <th>Tipo</th>
-                <th>Fecha</th>
-                <th>Estado</th>
-                <th>Acciones</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">WhatsApp</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Tipo</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Fecha</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Acciones</th>
               </tr>
             </thead>
-            <tbody>
-              {comprobantes.map(comp => (
-                <tr key={comp.id}>
-                  <td>{comp.numero_whatsapp}</td>
-                  <td>
-                    {comp.tipo === 'imagen' && '📷'}
-                    {comp.tipo === 'audio' && '🎙️'}
-                    {comp.tipo === 'texto' && '📝'}
-                    {' '}{comp.tipo}
+            <tbody className="divide-y divide-slate-700/50">
+              {comprobantes.map((c, i) => (
+                <tr key={c.id} className={`hover:bg-slate-700/30 transition ${i % 2 === 0 ? 'bg-slate-800/20' : ''}`}>
+                  <td className="px-6 py-4 font-mono text-sm text-white">{c.numero_whatsapp}</td>
+                  <td className="px-6 py-4 text-slate-300">
+                    {c.tipo === 'imagen' && '📷'}
+                    {c.tipo === 'audio' && '🎙️'}
+                    {c.tipo === 'texto' && '📝'}
+                    {' ' + c.tipo}
                   </td>
-                  <td>{formatDate(comp.creado_en)}</td>
-                  <td><span className="badge bg-warning">Pendiente</span></td>
-                  <td>
+                  <td className="px-6 py-4 text-slate-400 text-sm">{new Date(c.creado_en * 1000).toLocaleDateString('es-AR')}</td>
+                  <td className="px-6 py-4 flex gap-2">
                     <button
-                      className="btn btn-sm btn-success me-2"
-                      onClick={() => aprobar(comp.id)}
+                      onClick={() => aprobar(c.id)}
+                      className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-sm transition"
                     >
                       Aprobar
                     </button>
                     <button
-                      className="btn btn-sm btn-danger"
-                      onClick={() => setSelectedId(comp.id)}
+                      onClick={() => rechazar(c.id)}
+                      className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-sm transition"
                     >
                       Rechazar
                     </button>
@@ -112,33 +101,8 @@ export default function Comprobantes() {
           </table>
         </div>
       ) : (
-        <div className="alert alert-info">No hay comprobantes pendientes</div>
-      )}
-
-      {selectedId && (
-        <div className="card mt-4">
-          <div className="card-header">Rechazar comprobante</div>
-          <div className="card-body">
-            <div className="mb-3">
-              <label className="form-label">Razón del rechazo</label>
-              <textarea
-                className="form-control"
-                rows="3"
-                value={razonRechazo}
-                onChange={(e) => setRazonRechazo(e.target.value)}
-                placeholder="Ej: Comprobante ilegible, falta información, etc"
-              ></textarea>
-            </div>
-            <button className="btn btn-danger" onClick={() => rechazar(selectedId)}>
-              Confirmar rechazo
-            </button>
-            <button className="btn btn-secondary ms-2" onClick={() => {
-              setSelectedId(null)
-              setRazonRechazo('')
-            }}>
-              Cancelar
-            </button>
-          </div>
+        <div className="rounded-lg border border-slate-700 bg-slate-800/50 backdrop-blur p-12 text-center">
+          <p className="text-slate-400">Sin comprobantes pendientes</p>
         </div>
       )}
     </div>

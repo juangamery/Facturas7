@@ -1,41 +1,38 @@
-export default function Navbar({ page, setPage }) {
+export default function Navbar({ page, setPage, onLogout }) {
+  const tabs = [
+    { id: 'dashboard', label: '📊 Dashboard' },
+    { id: 'clientes', label: '👥 Clientes' },
+    { id: 'facturas', label: '📄 Facturas' },
+    { id: 'comprobantes', label: '📋 Comprobantes' },
+  ]
+
   return (
-    <nav className="navbar navbar-expand-lg navbar-light bg-white border-bottom sticky-top">
-      <div className="container-fluid px-4">
-        <a className="navbar-brand fw-bold" href="#" style={{ color: '#667eea' }}>
+    <nav className="sticky top-0 z-50 border-b border-slate-800 bg-slate-900/95 backdrop-blur">
+      <div className="flex items-center justify-between px-6 py-4 max-w-7xl mx-auto w-full">
+        <div className="text-xl font-bold text-blue-500">
           📱 Facturación
-        </a>
-        <button className="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-          <span className="navbar-toggler-icon"></span>
-        </button>
-        <div className="collapse navbar-collapse" id="navbarNav">
-          <div className="navbar-nav ms-auto">
+        </div>
+
+        <div className="flex gap-1">
+          {tabs.map(tab => (
             <button
-              className={`nav-link btn btn-link ${page === 'dashboard' ? 'active' : ''}`}
-              onClick={() => setPage('dashboard')}
+              key={tab.id}
+              onClick={() => setPage(tab.id)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                page === tab.id
+                  ? 'bg-blue-600 text-white'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
             >
-              📊 Dashboard
+              {tab.label}
             </button>
-            <button
-              className={`nav-link btn btn-link ${page === 'clientes' ? 'active' : ''}`}
-              onClick={() => setPage('clientes')}
-            >
-              👥 Clientes
-            </button>
-            <button
-              className={`nav-link btn btn-link ${page === 'facturas' ? 'active' : ''}`}
-              onClick={() => setPage('facturas')}
-            >
-              📄 Facturas
-            </button>
-            <button
-              className={`nav-link btn btn-link ${page === 'comprobantes' ? 'active' : ''}`}
-              onClick={() => setPage('comprobantes')}
-            >
-              📋 Comprobantes
-            </button>
-            <a className="nav-link" href="/admin/logout">🚪 Salir</a>
-          </div>
+          ))}
+          <button
+            onClick={onLogout}
+            className="px-4 py-2 rounded-lg text-sm font-medium text-red-400 hover:text-red-300 hover:bg-slate-800 transition"
+          >
+            🚪 Salir
+          </button>
         </div>
       </div>
     </nav>
