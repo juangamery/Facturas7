@@ -96,30 +96,69 @@ function buscarEmailsNuevos() {
 }
 
 async function procesarEmailImap(msg) {
-  return new Promise((resolve) => {
-    msg.on('attributes', async (attrs) => {
-      // Get email structure
+  return new Promise((resolve, reject) => {
+    try {
+      let resolved = false;
+
+      const timeout = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          logger.warn('⏱️ Timeout procesando email');
+          resolve();
+        }
+      }, 30000);
+
       msg.on('body', async (stream, info) => {
         try {
+          logger.info(`🔄 Parseando email...`);
           const parsed = await simpleParser(stream);
           const { subject, text, from } = parsed;
 
-          const emailFrom = from?.text || from || '';
+          const emailFrom = typeof from === 'string' ? from : from?.text || '';
           const contenido = `Asunto: ${subject}\n\n${text || ''}`;
 
           logger.info(`📧 De: ${emailFrom}, Asunto: ${subject}`);
+
+          if (!emailFrom) {
+            logger.warn('❌ Email FROM vacío');
+            return;
+          }
 
           const resultado = await procesarConGroq(contenido, emailFrom);
 
           if (resultado.success) {
             logger.info(`✅ Factura creada: #${resultado.factura}`);
+          } else {
+            logger.warn(`⚠️ ${resultado.error}`);
+          }
+
+          if (!resolved) {
+            resolved = true;
+            clearTimeout(timeout);
+            resolve();
           }
         } catch (err) {
-          logger.warn(`Procesar email: ${err.message}`);
+          logger.error(`❌ Parse error: ${err.message}`);
+          if (!resolved) {
+            resolved = true;
+            clearTimeout(timeout);
+            resolve();
+          }
         }
-        resolve();
       });
-    });
+
+      msg.on('error', (err) => {
+        logger.error(`❌ Message error: ${err.message}`);
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timeout);
+          resolve();
+        }
+      });
+    } catch (err) {
+      logger.error(`❌ Setup error: ${err.message}`);
+      resolve();
+    }
   });
 }
 
