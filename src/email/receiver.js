@@ -87,7 +87,7 @@ function buscarEmailsNuevos() {
     imap.search(['UNSEEN'], (err, results) => {
       if (err || !results || results.length === 0) return;
 
-      const f = imap.fetch(results, { bodies: '1' });
+      const f = imap.fetch(results, { bodies: '' });
       f.on('message', (msg) => procesarEmailImap(msg));
     });
   } catch (error) {
@@ -97,41 +97,25 @@ function buscarEmailsNuevos() {
 
 async function procesarEmailImap(msg) {
   return new Promise((resolve) => {
-    let subject = '';
-    let from = '';
-    let text = '';
-
-    msg.on('attributes', (attrs) => {
-      logger.info(`📬 Email attrs: ${JSON.stringify(attrs)}`);
-    });
-
-    msg.on('body', (stream, info) => {
-      let data = '';
-      stream.on('data', (chunk) => {
-        data += chunk.toString();
-      });
-      stream.on('end', async () => {
-        // Parse headers manually
-        const lines = data.split('\n');
-        for (let line of lines) {
-          if (line.toLowerCase().startsWith('subject:')) {
-            subject = line.substring(8).trim();
-          } else if (line.toLowerCase().startsWith('from:')) {
-            from = line.substring(5).trim();
-          } else if (!line.includes(':') && line.trim()) {
-            text += line + '\n';
-          }
-        }
-
+    msg.on('attributes', async (attrs) => {
+      // Get email structure
+      msg.on('body', async (stream, info) => {
         try {
-          const contenido = `Asunto: ${subject}\n\n${text}`;
-          const resultado = await procesarConGroq(contenido, from);
+          const parsed = await simpleParser(stream);
+          const { subject, text, from } = parsed;
+
+          const emailFrom = from?.text || from || '';
+          const contenido = `Asunto: ${subject}\n\n${text || ''}`;
+
+          logger.info(`📧 De: ${emailFrom}, Asunto: ${subject}`);
+
+          const resultado = await procesarConGroq(contenido, emailFrom);
 
           if (resultado.success) {
-            logger.info(`✅ Email procesado: ${from} - Factura: ${resultado.factura}`);
+            logger.info(`✅ Factura creada: #${resultado.factura}`);
           }
         } catch (err) {
-          logger.warn(`Groq error: ${err.message}`);
+          logger.warn(`Procesar email: ${err.message}`);
         }
         resolve();
       });
