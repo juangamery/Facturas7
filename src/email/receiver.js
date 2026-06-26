@@ -100,6 +100,11 @@ async function procesarEmailImap(msg) {
     try {
       let resolved = false;
 
+      // Marcar como leído inmediatamente
+      msg.setFlags(['\\Seen'], (err) => {
+        if (err) logger.warn(`⚠️ Error marcando: ${err.message}`);
+      });
+
       const timeout = setTimeout(() => {
         if (!resolved) {
           resolved = true;
@@ -128,11 +133,6 @@ async function procesarEmailImap(msg) {
 
           if (resultado.success) {
             logger.info(`✅ Factura creada: #${resultado.factura}`);
-            // Marcar como leído
-            msg.setFlags(['\\Seen'], (err) => {
-              if (err) logger.warn(`⚠️ Error marcando como leído: ${err.message}`);
-              else logger.info(`✓ Email marcado como leído`);
-            });
           } else {
             logger.warn(`⚠️ ${resultado.error}`);
           }
