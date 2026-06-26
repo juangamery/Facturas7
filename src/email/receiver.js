@@ -218,10 +218,9 @@ async function crearFacturaConDatos(cuit, concepto, importe, emailFrom) {
     const ahora = Math.floor(Date.now() / 1000);
 
     const usuario = db.prepare('SELECT * FROM usuarios WHERE cuit = ?').get(cuit);
-    if (!usuario) return { success: false, error: 'Usuario no encontrado' };
-
-    if (!usuario.email || usuario.email !== emailFrom) {
-      return { success: false, error: 'Email no coincide' };
+    if (!usuario) {
+      logger.warn(`❌ Usuario no encontrado: CUIT ${cuit}`);
+      return { success: false, error: 'Usuario no encontrado' };
     }
 
     const numero = `${ahora}`;
@@ -238,20 +237,60 @@ async function crearFacturaConDatos(cuit, concepto, importe, emailFrom) {
       'PENDIENTE', '', pdfPath, 'email', ahora
     );
 
+    const factura_id = db.prepare('SELECT last_insert_rowid() as id').get().id;
+
     db.prepare(`
       INSERT INTO solicitudes_factura (usuario_id, email, factura_id, estado, creado_en)
-      VALUES (?, ?, ?, 'enviada', ?)
-    `).run(usuario.id, emailFrom, db.prepare('SELECT last_insert_rowid() as id').get().id, ahora);
+      VALUES (?, ?, ?, 'procesada', ?)
+    `).run(usuario.id, emailFrom, factura_id, ahora);
 
-    await enviarFacturaEmail(emailFrom, `Factura-${numero}.pdf`, pdfPath);
+    // Enviar respuesta por email
+    try {
+      await enviarRespuestaEmail(emailFrom, numero, concepto, importe);
+      logger.info(`📧 Email de respuesta enviado a ${emailFrom}`);
+    } catch (emailErr) {
+      logger.warn(`⚠️ Error enviando email: ${emailErr.message}`);
+    }
 
-    logger.info(`✅ Factura creada por Groq: ${numero}`);
+    logger.info(`✅ Factura creada: #${numero} para ${usuario.razon_social}`);
     return { success: true, factura: numero, email: emailFrom };
 
   } catch (error) {
     logger.error(`Crear factura: ${error.message}`);
     return { success: false, error: error.message };
   }
+}
+
+async function enviarRespuestaEmail(destinatario, numero, concepto, importe) {
+  const nodemailer = require('nodemailer');
+
+  const transporter = nodemailer.createTransport({
+    host: process.env.MAIL_HOST,
+    port: parseInt(process.env.MAIL_PORT || 587),
+    secure: false,
+    auth: {
+      user: process.env.MAIL_USER,
+      pass: process.env.MAIL_PASS
+    }
+  });
+
+  const html = `
+    <h2>✅ Factura Generada</h2>
+    <p>Tu factura ha sido procesada correctamente.</p>
+    <p><strong>Número de Factura:</strong> #${numero}</p>
+    <p><strong>Concepto:</strong> ${concepto}</p>
+    <p><strong>Importe:</strong> $${importe}</p>
+    <p>Próximamente recibirás el PDF adjunto en otro email.</p>
+    <hr>
+    <p><small>Sistema automático de facturación</small></p>
+  `;
+
+  await transporter.sendMail({
+    from: process.env.MAIL_FROM,
+    to: destinatario,
+    subject: `Factura #${numero} - Sistema de Facturación`,
+    html: html
+  });
 }
 
 export async function procesarEmailManual(cuit, emailOrigen) {
