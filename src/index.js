@@ -8,8 +8,10 @@
 // 4. Inicia el servidor Express
 // 5. Configura webhooks de Meta y Mercado Pago
 
-import express from 'express';
 import dotenv from 'dotenv';
+dotenv.config();
+
+import express from 'express';
 import session from 'express-session';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -27,9 +29,6 @@ import { inicializarReceiver } from './email/receiver.js';
 // Configurar rutas (compatibilidad con ES modules)
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-// Cargar variables de entorno desde .env
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;

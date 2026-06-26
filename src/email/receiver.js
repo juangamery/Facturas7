@@ -6,9 +6,16 @@ import { getDB } from '../db.js';
 import { enviarFacturaEmail } from './mailer.js';
 import { solicitarCAE } from '../facturacion/factura.js';
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+let groq = null;
 let imap = null;
 let conectando = false;
+
+function getGroq() {
+  if (!groq) {
+    groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+  }
+  return groq;
+}
 
 export function inicializarReceiver() {
   intentarConectar();
@@ -107,28 +114,49 @@ export async function procesarConGroq(contenido, emailFrom) {
   try {
     logger.info(`🧠 Groq procesando email de ${emailFrom}`);
 
-    const completion = await groq.chat.completions.create({
+    const completion = await getGroq().chat.completions.create({
       messages: [{
         role: 'user',
-        content: `Extrae datos del email del cliente:
+        content: `Extract invoice request data from email. Return ONLY valid JSON.
+
+Email:
 ${contenido}
 
-Responde con JSON: {"cuit":"XXXXXXXX", "concepto":"...", "importe":0}
-Si no encuentras algo, usa null. Cuit debe ser 11 dígitos.`
+JSON format (values as null if not found):
+{"cuit":"11-digit-number","concept":"description","amount":number}
+
+Examples:
+{"cuit":"20123456789","concept":"Professional services","amount":3000}
+{"cuit":"20987654321","concept":"Consulting","amount":5000}`
       }],
       model: 'llama-3.3-70b-versatile',
-      temperature: 0.2
+      temperature: 0
     });
 
     const respuesta = completion.choices[0].message.content;
-    const datos = JSON.parse(respuesta);
+    logger.info(`📝 Groq raw response: ${respuesta}`);
 
-    if (!datos.cuit || !datos.concepto || !datos.importe) {
+    // Extract JSON from response (may contain extra text)
+    const jsonMatch = respuesta.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      logger.warn(`❌ No JSON found in response: ${respuesta}`);
+      return { success: false, error: 'Could not extract JSON from response' };
+    }
+
+    logger.info(`🔍 Extracted JSON: ${jsonMatch[0]}`);
+    const datos = JSON.parse(jsonMatch[0]);
+
+    // Accept both Spanish and English keys
+    const cuit = datos.cuit;
+    const concepto = datos.concepto || datos.concept;
+    const importe = datos.importe || datos.amount;
+
+    if (!cuit || !concepto || !importe) {
       logger.warn('❌ Groq: datos incompletos');
       return { success: false, error: 'Datos incompletos' };
     }
 
-    return await crearFacturaConDatos(datos.cuit, datos.concepto, datos.importe, emailFrom);
+    return await crearFacturaConDatos(cuit, concepto, importe, emailFrom);
 
   } catch (error) {
     logger.error(`Groq error: ${error.message}`);
