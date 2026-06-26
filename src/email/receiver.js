@@ -128,6 +128,11 @@ async function procesarEmailImap(msg) {
 
           if (resultado.success) {
             logger.info(`✅ Factura creada: #${resultado.factura}`);
+            // Marcar como leído
+            msg.setFlags(['\\Seen'], (err) => {
+              if (err) logger.warn(`⚠️ Error marcando como leído: ${err.message}`);
+              else logger.info(`✓ Email marcado como leído`);
+            });
           } else {
             logger.warn(`⚠️ ${resultado.error}`);
           }
