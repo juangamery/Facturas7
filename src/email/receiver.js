@@ -3,7 +3,7 @@ import { simpleParser } from 'mailparser';
 import Groq from 'groq-sdk';
 import { logger } from '../logger.js';
 import { getDB } from '../db.js';
-import { enviarFacturaEmail } from './mailer.js';
+import { enviarFacturaEmail, enviarRespuestaEmail, enviarPedidoRegistro } from './mailer.js';
 import { solicitarCAE } from '../facturacion/factura.js';
 
 let groq = null;
@@ -268,73 +268,6 @@ async function crearFacturaConDatos(cuit, concepto, importe, emailFrom) {
     logger.error(`Crear factura: ${error.message}`);
     return { success: false, error: error.message };
   }
-}
-
-async function enviarRespuestaEmail(destinatario, numero, concepto, importe) {
-  const nodemailer = require('nodemailer');
-
-  const transporter = nodemailer.createTransport({
-    host: process.env.MAIL_HOST,
-    port: parseInt(process.env.MAIL_PORT || 587),
-    secure: false,
-    auth: {
-      user: process.env.MAIL_USER,
-      pass: process.env.MAIL_PASS
-    }
-  });
-
-  const html = `
-    <h2>✅ Factura Generada</h2>
-    <p>Tu factura ha sido procesada correctamente.</p>
-    <p><strong>Número de Factura:</strong> #${numero}</p>
-    <p><strong>Concepto:</strong> ${concepto}</p>
-    <p><strong>Importe:</strong> $${importe}</p>
-    <p>Próximamente recibirás el PDF adjunto en otro email.</p>
-    <hr>
-    <p><small>Sistema automático de facturación</small></p>
-  `;
-
-  await transporter.sendMail({
-    from: process.env.MAIL_FROM,
-    to: destinatario,
-    subject: `Factura #${numero} - Sistema de Facturación`,
-    html: html
-  });
-}
-
-async function enviarPedidoRegistro(destinatario, cuit) {
-  const nodemailer = require('nodemailer');
-
-  const transporter = nodemailer.createTransport({
-    host: process.env.MAIL_HOST,
-    port: parseInt(process.env.MAIL_PORT || 587),
-    secure: false,
-    auth: {
-      user: process.env.MAIL_USER,
-      pass: process.env.MAIL_PASS
-    }
-  });
-
-  const html = `
-    <h2>⚠️ Registro Requerido</h2>
-    <p>Para crear facturas, primero debes registrarte en el sistema.</p>
-    <p><strong>Tu CUIT:</strong> ${cuit}</p>
-    <hr>
-    <h3>Opciones para registrarte:</h3>
-    <p><strong>1. Por WhatsApp:</strong> Envía tu mensaje a nuestro número WhatsApp con tu CUIT y datos.</p>
-    <p><strong>2. Por Email:</strong> Responde a este email con tus datos de empresa (razón social, domicilio, etc.)</p>
-    <p><strong>3. Panel Web:</strong> Accede a ${process.env.BASE_URL || 'http://localhost:5173'} y regístrate.</p>
-    <hr>
-    <p>Una vez registrado, podrás solicitar facturas directamente.</p>
-    <p><small>Sistema automático de facturación</small></p>
-  `;
-
-  await transporter.sendMail({
-    from: process.env.MAIL_FROM,
-    to: destinatario,
-    subject: 'Registro Requerido - Sistema de Facturación',
-    html: html
-  });
 }
 
 export async function procesarEmailManual(cuit, emailOrigen) {
