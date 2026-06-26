@@ -285,12 +285,13 @@ async function crearFacturaConDatos(cuit, concepto, importe, emailFrom) {
       VALUES (?, ?, ?, 'procesada', ?)
     `).run(usuario.id, emailFrom, factura_id, ahora);
 
-    // Enviar respuesta por email
+    // Generar PDF y enviar respuesta
     try {
-      await enviarRespuestaEmail(emailFrom, numero, concepto, importe);
-      logger.info(`📧 Email de respuesta enviado a ${emailFrom}`);
+      const pdfBuffer = generarPDFFactura(numero, usuario.razon_social, usuario.cuit, concepto, importe);
+      await enviarRespuestaEmail(emailFrom, numero, concepto, importe, pdfBuffer);
+      logger.info(`📧 Email con PDF enviado a ${emailFrom}`);
     } catch (emailErr) {
-      logger.warn(`⚠️ Error enviando email: ${emailErr.message}`);
+      logger.error(`❌ Error enviando email: ${emailErr.message}`);
     }
 
     logger.info(`✅ Factura creada: #${numero} para ${usuario.razon_social}`);
@@ -300,6 +301,29 @@ async function crearFacturaConDatos(cuit, concepto, importe, emailFrom) {
     logger.error(`Crear factura: ${error.message}`);
     return { success: false, error: error.message };
   }
+}
+
+function generarPDFFactura(numero, razonSocial, cuit, concepto, importe) {
+  // PDF simple en texto (sin librería)
+  const contenido = `
+FACTURA
+
+Número: ${numero}
+Fecha: ${new Date().toISOString().split('T')[0]}
+
+EMPRESA:
+${razonSocial}
+CUIT: ${cuit}
+
+CONCEPTO:
+${concepto}
+
+IMPORTE: $${importe}
+
+Estado: PENDIENTE
+  `;
+
+  return Buffer.from(contenido, 'utf8');
 }
 
 export async function procesarEmailManual(cuit, emailOrigen) {

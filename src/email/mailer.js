@@ -45,7 +45,7 @@ export async function enviarFacturaEmail(destinatario, nombreArchivo, rutaPDF) {
   }
 }
 
-export async function enviarRespuestaEmail(destinatario, numero, concepto, importe) {
+export async function enviarRespuestaEmail(destinatario, numero, concepto, importe, pdfBuffer) {
   try {
     if (!transporter) inicializarMailer();
 
@@ -55,19 +55,28 @@ export async function enviarRespuestaEmail(destinatario, numero, concepto, impor
       <p><strong>Número de Factura:</strong> #${numero}</p>
       <p><strong>Concepto:</strong> ${concepto}</p>
       <p><strong>Importe:</strong> $${importe}</p>
-      <p>Próximamente recibirás el PDF adjunto en otro email.</p>
+      <p>Adjunto encontrarás tu factura en PDF.</p>
       <hr>
       <p><small>Sistema automático de facturación</small></p>
     `;
+
+    const attachments = [];
+    if (pdfBuffer) {
+      attachments.push({
+        filename: `Factura_${numero}.txt`,
+        content: pdfBuffer
+      });
+    }
 
     const info = await transporter.sendMail({
       from: process.env.MAIL_FROM,
       to: destinatario,
       subject: `Factura #${numero} - Sistema de Facturación`,
-      html: html
+      html: html,
+      attachments: attachments
     });
 
-    logger.info(`📧 Respuesta enviada a ${destinatario}`);
+    logger.info(`📧 Factura #${numero} enviada a ${destinatario}`);
     return true;
   } catch (error) {
     logger.error(`Error enviando respuesta: ${error.message}`);
