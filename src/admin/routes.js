@@ -318,6 +318,26 @@ router.post('/email-procesar', async (req, res) => {
   }
 });
 
+// POST /admin/email-groq - Procesar email con Groq (PÚBLICO)
+router.post('/email-groq', async (req, res) => {
+  try {
+    const { asunto, cuerpo, email } = req.body;
+
+    if (!asunto || !cuerpo || !email) {
+      return res.status(400).json({ error: 'Falta asunto, cuerpo o email' });
+    }
+
+    const { procesarConGroq } = await import('../email/receiver.js');
+    const resultado = await procesarConGroq(`Asunto: ${asunto}\n\n${cuerpo}`, email);
+
+    res.json(resultado);
+
+  } catch (error) {
+    logearError(error, 'Email Groq');
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ==========================================
 // RUTAS PROTEGIDAS (requieren login)
 // ==========================================
