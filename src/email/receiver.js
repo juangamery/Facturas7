@@ -103,7 +103,7 @@ async function procesarEmailImap(msg) {
   }
 }
 
-async function procesarConGroq(contenido, emailFrom) {
+export async function procesarConGroq(contenido, emailFrom) {
   try {
     logger.info(`🧠 Groq procesando email de ${emailFrom}`);
 
