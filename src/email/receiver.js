@@ -242,17 +242,26 @@ async function crearFacturaConDatos(cuit, concepto, importe, emailFrom) {
 
     let usuario = db.prepare('SELECT * FROM usuarios WHERE cuit = ?').get(cuit);
 
+    // Auto-registrar si no existe
     if (!usuario) {
-      logger.info(`🔔 Usuario no registrado: CUIT ${cuit}, email ${emailFrom}`);
+      logger.info(`📝 Auto-registrando usuario: CUIT ${cuit}, email ${emailFrom}`);
 
-      // Responder pidiendo registro
+      // Extraer nombre del email (parte antes de @)
+      const nombreAuto = emailFrom.split('@')[0] || 'Cliente Email';
+      const telefonoAuto = '11-0000-0000'; // Default
+
       try {
-        await enviarPedidoRegistro(emailFrom, cuit);
-      } catch (err) {
-        logger.warn(`Error enviando pedido de registro: ${err.message}`);
-      }
+        db.prepare(`
+          INSERT INTO usuarios (nombre, numero_telefono, cuit, razon_social, email, plan, activo, fecha_registro)
+          VALUES (?, ?, ?, ?, ?, 'basico', 1, ?)
+        `).run(nombreAuto, telefonoAuto, cuit, nombreAuto, emailFrom, ahora);
 
-      return { success: false, error: 'Usuario no registrado, se envió solicitud de registro' };
+        usuario = db.prepare('SELECT * FROM usuarios WHERE cuit = ?').get(cuit);
+        logger.info(`✅ Usuario auto-registrado: ${nombreAuto}`);
+      } catch (err) {
+        logger.error(`❌ Error auto-registrando: ${err.message}`);
+        return { success: false, error: 'No se pudo registrar usuario' };
+      }
     }
 
     const numero = `${ahora}`;
