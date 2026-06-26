@@ -25,6 +25,8 @@ function intentarConectar(intento = 1) {
   if (conectando) return;
   conectando = true;
 
+  logger.info(`🔗 IMAP intento ${intento}: ${process.env.MAIL_USER}@${process.env.MAIL_IMAP_HOST}`);
+
   try {
     imap = new Imap({
       user: process.env.MAIL_USER,
@@ -38,9 +40,19 @@ function intentarConectar(intento = 1) {
     });
 
     imap.on('ready', () => {
-      logger.info('✅ IMAP + Groq conectado');
-      conectando = false;
-      buscarEmailsNuevos();
+      logger.info('✅ IMAP autenticado');
+      imap.openBox('INBOX', false, (err) => {
+        if (err) {
+          logger.warn(`❌ Error INBOX: ${err.message}`);
+          conectando = false;
+          setTimeout(() => intentarConectar(intento + 1), 5000 * intento);
+          imap.end();
+          return;
+        }
+        logger.info('✅ IMAP + Groq conectado');
+        conectando = false;
+        buscarEmailsNuevos();
+      });
     });
 
     imap.on('mail', () => {
@@ -49,9 +61,9 @@ function intentarConectar(intento = 1) {
     });
 
     imap.on('error', (err) => {
-      logger.warn(`IMAP error: ${err.message}`);
+      logger.warn(`❌ IMAP error (intento ${intento}): ${err.message}`);
       conectando = false;
-      setTimeout(() => intentarConectar(intento + 1), 5000);
+      setTimeout(() => intentarConectar(intento + 1), 5000 * intento);
     });
 
     imap.on('end', () => {
@@ -59,15 +71,7 @@ function intentarConectar(intento = 1) {
       setTimeout(() => intentarConectar(intento + 1), 5000);
     });
 
-    imap.openBox('INBOX', false, (err) => {
-      if (err) {
-        logger.warn(`Error INBOX: ${err.message}`);
-        conectando = false;
-        setTimeout(() => intentarConectar(intento + 1), 5000);
-      }
-    });
-
-    imap.openBox('INBOX', false, () => {});
+    imap.connect();
 
   } catch (error) {
     logger.warn(`IMAP init error: ${error.message}`);
@@ -83,7 +87,7 @@ function buscarEmailsNuevos() {
     imap.search(['UNSEEN'], (err, results) => {
       if (err || !results || results.length === 0) return;
 
-      const f = imap.fetch(results, { bodies: '' });
+      const f = imap.fetch(results, { bodies: '1' });
       f.on('message', (msg) => procesarEmailImap(msg));
     });
   } catch (error) {
@@ -92,22 +96,47 @@ function buscarEmailsNuevos() {
 }
 
 async function procesarEmailImap(msg) {
-  try {
-    const parsed = await simpleParser(msg);
-    const { subject, text, from } = parsed;
+  return new Promise((resolve) => {
+    let subject = '';
+    let from = '';
+    let text = '';
 
-    const emailFrom = from?.text || '';
-    const contenido = `Asunto: ${subject}\n\n${text || ''}`;
+    msg.on('attributes', (attrs) => {
+      logger.info(`📬 Email attrs: ${JSON.stringify(attrs)}`);
+    });
 
-    const resultado = await procesarConGroq(contenido, emailFrom);
+    msg.on('body', (stream, info) => {
+      let data = '';
+      stream.on('data', (chunk) => {
+        data += chunk.toString();
+      });
+      stream.on('end', async () => {
+        // Parse headers manually
+        const lines = data.split('\n');
+        for (let line of lines) {
+          if (line.toLowerCase().startsWith('subject:')) {
+            subject = line.substring(8).trim();
+          } else if (line.toLowerCase().startsWith('from:')) {
+            from = line.substring(5).trim();
+          } else if (!line.includes(':') && line.trim()) {
+            text += line + '\n';
+          }
+        }
 
-    if (resultado.success) {
-      msg.setFlags(['\\Seen']);
-      logger.info(`✅ Email procesado por Groq: ${emailFrom}`);
-    }
-  } catch (error) {
-    logger.warn(`Procesar email IMAP: ${error.message}`);
-  }
+        try {
+          const contenido = `Asunto: ${subject}\n\n${text}`;
+          const resultado = await procesarConGroq(contenido, from);
+
+          if (resultado.success) {
+            logger.info(`✅ Email procesado: ${from} - Factura: ${resultado.factura}`);
+          }
+        } catch (err) {
+          logger.warn(`Groq error: ${err.message}`);
+        }
+        resolve();
+      });
+    });
+  });
 }
 
 export async function procesarConGroq(contenido, emailFrom) {
@@ -117,17 +146,20 @@ export async function procesarConGroq(contenido, emailFrom) {
     const completion = await getGroq().chat.completions.create({
       messages: [{
         role: 'user',
-        content: `Extract invoice request data from email. Return ONLY valid JSON.
+        content: `Extract invoice data EXACTLY as shown. Return ONLY valid JSON with no extra text.
 
 Email:
 ${contenido}
 
-JSON format (values as null if not found):
-{"cuit":"11-digit-number","concept":"description","amount":number}
+INSTRUCTIONS:
+- cuit: Extract exact 11-digit number (e.g., "20347351300")
+- concept: Description of what is being invoiced
+- amount: Calculate to single NUMBER, never expressions (if "5000+40000", return 45000)
 
-Examples:
-{"cuit":"20123456789","concept":"Professional services","amount":3000}
-{"cuit":"20987654321","concept":"Consulting","amount":5000}`
+Response format - ONLY this JSON:
+{"cuit":"20347351300","concept":"description","amount":12345}
+
+Do not include code blocks, markdown, or explanations. Return ONLY the JSON object.`
       }],
       model: 'llama-3.3-70b-versatile',
       temperature: 0
@@ -136,15 +168,31 @@ Examples:
     const respuesta = completion.choices[0].message.content;
     logger.info(`📝 Groq raw response: ${respuesta}`);
 
-    // Extract JSON from response (may contain extra text)
-    const jsonMatch = respuesta.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      logger.warn(`❌ No JSON found in response: ${respuesta}`);
+    // Extract first valid JSON object
+    let jsonObj = null;
+    try {
+      // Try to find JSON object in response
+      const match = respuesta.match(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/);
+      if (match) {
+        jsonObj = JSON.parse(match[0]);
+      }
+    } catch (e) {
+      // Try eval as last resort (Groq might return valid JS)
+      try {
+        jsonObj = eval(`(${respuesta})`);
+      } catch (e2) {
+        logger.warn(`❌ Could not parse JSON from: ${respuesta.substring(0, 100)}`);
+        return { success: false, error: 'Invalid JSON response' };
+      }
+    }
+
+    if (!jsonObj) {
+      logger.warn(`❌ No JSON object found in: ${respuesta}`);
       return { success: false, error: 'Could not extract JSON from response' };
     }
 
-    logger.info(`🔍 Extracted JSON: ${jsonMatch[0]}`);
-    const datos = JSON.parse(jsonMatch[0]);
+    logger.info(`🔍 Extracted JSON: ${JSON.stringify(jsonObj)}`);
+    const datos = jsonObj;
 
     // Accept both Spanish and English keys
     const cuit = datos.cuit;
