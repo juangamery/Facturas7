@@ -66,14 +66,15 @@ router.get('/stats', (req, res) => {
        WHERE activo = 1 AND fecha_vencimiento < strftime('%s', 'now')`
     ).get();
 
+    const ahora = Math.floor(Date.now() / 1000);
+    const hoy = ahora - (ahora % 86400);
+
     const facturasHoy = db.prepare(
-      `SELECT COUNT(*) as count FROM facturas
-       WHERE DATE(datetime(creado_en, 'unixepoch')) = DATE('now')`
-    ).get();
+      `SELECT COUNT(*) as count FROM facturas WHERE creado_en >= ?`
+    ).get(hoy);
 
     const facturasDelMes = db.prepare(
-      `SELECT COUNT(*) as count FROM facturas
-       WHERE strftime('%Y-%m', datetime(creado_en, 'unixepoch')) = strftime('%Y-%m', 'now')`
+      `SELECT COUNT(*) as count FROM facturas`
     ).get();
 
     const ultimasFacturas = db.prepare(
@@ -360,14 +361,15 @@ router.get('/dashboard', (req, res) => {
        WHERE activo = 1 AND fecha_vencimiento < strftime('%s', 'now')`
     ).get();
 
+    const ahora = Math.floor(Date.now() / 1000);
+    const hoy = ahora - (ahora % 86400);
+
     const facturasHoy = db.prepare(
-      `SELECT COUNT(*) as count FROM facturas
-       WHERE DATE(datetime(creado_en, 'unixepoch')) = DATE('now')`
-    ).get();
+      `SELECT COUNT(*) as count FROM facturas WHERE creado_en >= ?`
+    ).get(hoy);
 
     const facturasDelMes = db.prepare(
-      `SELECT COUNT(*) as count FROM facturas
-       WHERE strftime('%Y-%m', datetime(creado_en, 'unixepoch')) = strftime('%Y-%m', 'now')`
+      `SELECT COUNT(*) as count FROM facturas`
     ).get();
 
     // Últimas actividades
