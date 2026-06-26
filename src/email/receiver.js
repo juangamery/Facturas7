@@ -1,9 +1,12 @@
 import Imap from 'imap';
 import { simpleParser } from 'mailparser';
+import Groq from 'groq-sdk';
 import { logger } from '../logger.js';
 import { getDB } from '../db.js';
 import { enviarFacturaEmail } from './mailer.js';
+import { solicitarCAE } from '../facturacion/factura.js';
 
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 let imap = null;
 let conectando = false;
 
@@ -28,7 +31,7 @@ function intentarConectar(intento = 1) {
     });
 
     imap.on('ready', () => {
-      logger.info('✅ IMAP conectado');
+      logger.info('✅ IMAP + Groq conectado');
       conectando = false;
       buscarEmailsNuevos();
     });
@@ -87,24 +90,97 @@ async function procesarEmailImap(msg) {
     const { subject, text, from } = parsed;
 
     const emailFrom = from?.text || '';
-    const cuitMatch = subject?.match(/\d{11}/) || text?.match(/\d{11}/);
+    const contenido = `Asunto: ${subject}\n\n${text || ''}`;
 
-    if (!cuitMatch || !emailFrom) return;
-
-    const resultado = await procesarEmailManual(cuitMatch[0], emailFrom);
+    const resultado = await procesarConGroq(contenido, emailFrom);
 
     if (resultado.success) {
       msg.setFlags(['\\Seen']);
-      logger.info(`✅ Email procesado: ${emailFrom}`);
+      logger.info(`✅ Email procesado por Groq: ${emailFrom}`);
     }
   } catch (error) {
     logger.warn(`Procesar email IMAP: ${error.message}`);
   }
 }
 
+async function procesarConGroq(contenido, emailFrom) {
+  try {
+    logger.info(`🧠 Groq procesando email de ${emailFrom}`);
+
+    const completion = await groq.chat.completions.create({
+      messages: [{
+        role: 'user',
+        content: `Extrae datos del email del cliente:
+${contenido}
+
+Responde con JSON: {"cuit":"XXXXXXXX", "concepto":"...", "importe":0}
+Si no encuentras algo, usa null. Cuit debe ser 11 dígitos.`
+      }],
+      model: 'llama-3.3-70b-versatile',
+      temperature: 0.2
+    });
+
+    const respuesta = completion.choices[0].message.content;
+    const datos = JSON.parse(respuesta);
+
+    if (!datos.cuit || !datos.concepto || !datos.importe) {
+      logger.warn('❌ Groq: datos incompletos');
+      return { success: false, error: 'Datos incompletos' };
+    }
+
+    return await crearFacturaConDatos(datos.cuit, datos.concepto, datos.importe, emailFrom);
+
+  } catch (error) {
+    logger.error(`Groq error: ${error.message}`);
+    return { success: false, error: error.message };
+  }
+}
+
+async function crearFacturaConDatos(cuit, concepto, importe, emailFrom) {
+  try {
+    const db = getDB();
+    const ahora = Math.floor(Date.now() / 1000);
+
+    const usuario = db.prepare('SELECT * FROM usuarios WHERE cuit = ?').get(cuit);
+    if (!usuario) return { success: false, error: 'Usuario no encontrado' };
+
+    if (!usuario.email || usuario.email !== emailFrom) {
+      return { success: false, error: 'Email no coincide' };
+    }
+
+    const numero = `${ahora}`;
+    const pdfPath = `facturas/Factura_${numero}_${ahora}.pdf`;
+
+    db.prepare(`
+      INSERT INTO facturas (usuario_id, numero_telefono, fecha_emision, tipo_comprobante, numero_factura,
+                           razon_social_cliente, documento_cliente, concepto, importe, cae, vencimiento_cae,
+                           pdf_path, origen, creado_en)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      usuario.id, usuario.numero_telefono, new Date().toISOString().split('T')[0],
+      'Factura C', numero, usuario.razon_social, usuario.cuit, concepto, importe,
+      'PENDIENTE', '', pdfPath, 'email', ahora
+    );
+
+    db.prepare(`
+      INSERT INTO solicitudes_factura (usuario_id, email, factura_id, estado, creado_en)
+      VALUES (?, ?, ?, 'enviada', ?)
+    `).run(usuario.id, emailFrom, db.prepare('SELECT last_insert_rowid() as id').get().id, ahora);
+
+    await enviarFacturaEmail(emailFrom, `Factura-${numero}.pdf`, pdfPath);
+
+    logger.info(`✅ Factura creada por Groq: ${numero}`);
+    return { success: true, factura: numero, email: emailFrom };
+
+  } catch (error) {
+    logger.error(`Crear factura: ${error.message}`);
+    return { success: false, error: error.message };
+  }
+}
+
 export async function procesarEmailManual(cuit, emailOrigen) {
   try {
-    logger.info(`📧 Procesando: CUIT ${cuit} desde ${emailOrigen}`);
+    logger.info(`📧 Manual: CUIT ${cuit} desde ${emailOrigen}`);
 
     const db = getDB();
     const ahora = Math.floor(Date.now() / 1000);
@@ -122,13 +198,11 @@ export async function procesarEmailManual(cuit, emailOrigen) {
 
     if (!factura) return { success: false, error: 'Sin facturas' };
 
-    // Guardar solicitud
     db.prepare(`
       INSERT INTO solicitudes_factura (usuario_id, email, factura_id, estado, creado_en)
       VALUES (?, ?, ?, 'enviada', ?)
     `).run(usuario.id, emailOrigen, factura.id, ahora);
 
-    // Intentar enviar email
     const enviado = await enviarFacturaEmail(emailOrigen, `Factura-${factura.numero_factura}.pdf`, factura.pdf_path);
 
     return {
