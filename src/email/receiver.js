@@ -217,10 +217,19 @@ async function crearFacturaConDatos(cuit, concepto, importe, emailFrom) {
     const db = getDB();
     const ahora = Math.floor(Date.now() / 1000);
 
-    const usuario = db.prepare('SELECT * FROM usuarios WHERE cuit = ?').get(cuit);
+    let usuario = db.prepare('SELECT * FROM usuarios WHERE cuit = ?').get(cuit);
+
     if (!usuario) {
-      logger.warn(`❌ Usuario no encontrado: CUIT ${cuit}`);
-      return { success: false, error: 'Usuario no encontrado' };
+      logger.info(`🔔 Usuario no registrado: CUIT ${cuit}, email ${emailFrom}`);
+
+      // Responder pidiendo registro
+      try {
+        await enviarPedidoRegistro(emailFrom, cuit);
+      } catch (err) {
+        logger.warn(`Error enviando pedido de registro: ${err.message}`);
+      }
+
+      return { success: false, error: 'Usuario no registrado, se envió solicitud de registro' };
     }
 
     const numero = `${ahora}`;
@@ -289,6 +298,41 @@ async function enviarRespuestaEmail(destinatario, numero, concepto, importe) {
     from: process.env.MAIL_FROM,
     to: destinatario,
     subject: `Factura #${numero} - Sistema de Facturación`,
+    html: html
+  });
+}
+
+async function enviarPedidoRegistro(destinatario, cuit) {
+  const nodemailer = require('nodemailer');
+
+  const transporter = nodemailer.createTransport({
+    host: process.env.MAIL_HOST,
+    port: parseInt(process.env.MAIL_PORT || 587),
+    secure: false,
+    auth: {
+      user: process.env.MAIL_USER,
+      pass: process.env.MAIL_PASS
+    }
+  });
+
+  const html = `
+    <h2>⚠️ Registro Requerido</h2>
+    <p>Para crear facturas, primero debes registrarte en el sistema.</p>
+    <p><strong>Tu CUIT:</strong> ${cuit}</p>
+    <hr>
+    <h3>Opciones para registrarte:</h3>
+    <p><strong>1. Por WhatsApp:</strong> Envía tu mensaje a nuestro número WhatsApp con tu CUIT y datos.</p>
+    <p><strong>2. Por Email:</strong> Responde a este email con tus datos de empresa (razón social, domicilio, etc.)</p>
+    <p><strong>3. Panel Web:</strong> Accede a ${process.env.BASE_URL || 'http://localhost:5173'} y regístrate.</p>
+    <hr>
+    <p>Una vez registrado, podrás solicitar facturas directamente.</p>
+    <p><small>Sistema automático de facturación</small></p>
+  `;
+
+  await transporter.sendMail({
+    from: process.env.MAIL_FROM,
+    to: destinatario,
+    subject: 'Registro Requerido - Sistema de Facturación',
     html: html
   });
 }
