@@ -2,10 +2,7 @@
 pkgs = ["python311", "pkg-config", "sqlite"]
 
 [build]
-cmd = "npm ci"
-
-[env]
-PYTHON = "/usr/bin/python3"
+cmd = "export PYTHON=$(which python3) && npm ci"
 
 [start]
 cmd = "node src/index.js"
