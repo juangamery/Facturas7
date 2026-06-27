@@ -2,10 +2,5 @@
   "buildCommand": "npm run build",
   "devCommand": "npm run dev",
   "outputDirectory": "frontend/dist",
-  "framework": "vite",
-  "functions": {
-    "src/index.js": {
-      "runtime": "nodejs20.x"
-    }
-  }
+  "framework": "vite"
 }
