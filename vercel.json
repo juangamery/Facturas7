@@ -1,10 +1,5 @@
 {
   "buildCommand": "cd frontend && npm install && npm run build",
-  "functions": {
-    "api/handler.js": {
-      "runtime": "nodejs22.x"
-    }
-  },
   "rewrites": [
     {
       "source": "/(.*)",
