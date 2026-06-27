@@ -1,5 +1,4 @@
-import initSqlJs from 'sql.js/dist/sql-wasm.js';
-import fs from 'fs';
+import Database from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { logger } from './logger.js';
@@ -7,120 +6,27 @@ import { logger } from './logger.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DB_PATH = path.join(__dirname, '../data/facturacion.db');
 
-let SQL = null;
-let sqlDb = null;
-
-class DBWrapper {
-  constructor(database) {
-    this.db = database;
-  }
-
-  exec(sql) {
-    try {
-      this.db.run(sql);
-      this.save();
-    } catch (e) {
-      logger.error(`DB exec: ${e.message}`);
-      throw e;
-    }
-  }
-
-  prepare(sql) {
-    const db = this.db;
-    const self = this;
-    return {
-      run(...params) {
-        try {
-          db.run(sql, params);
-          self.save();
-          return { changes: 1 };
-        } catch (e) {
-          logger.error(`DB run: ${e.message}`);
-          throw e;
-        }
-      },
-      get(...params) {
-        try {
-          const stmt = db.prepare(sql);
-          stmt.bind(params);
-          if (stmt.step()) {
-            const row = stmt.getAsObject();
-            stmt.free();
-            return row;
-          }
-          stmt.free();
-          return undefined;
-        } catch (e) {
-          logger.error(`DB get: ${e.message}`);
-          throw e;
-        }
-      },
-      all(...params) {
-        try {
-          const stmt = db.prepare(sql);
-          stmt.bind(params);
-          const results = [];
-          while (stmt.step()) {
-            results.push(stmt.getAsObject());
-          }
-          stmt.free();
-          return results;
-        } catch (e) {
-          logger.error(`DB all: ${e.message}`);
-          throw e;
-        }
-      }
-    };
-  }
-
-  pragma() {}
-
-  save() {
-    try {
-      const dir = path.dirname(DB_PATH);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-      const data = this.db.export();
-      fs.writeFileSync(DB_PATH, Buffer.from(data));
-    } catch (e) {
-      logger.error(`DB save: ${e.message}`);
-    }
-  }
-
-  close() {
-    if (this.db) {
-      this.save();
-      this.db.close();
-    }
-  }
-}
+let db = null;
 
 export function getDB() {
-  if (!sqlDb) {
-    throw new Error('DB not initialized');
+  if (!db) {
+    try {
+      db = new Database(DB_PATH);
+      db.pragma('journal_mode = WAL');
+      logger.info(`📁 BD: ${DB_PATH}`);
+    } catch (error) {
+      logger.error(`BD connect: ${error.message}`);
+      throw error;
+    }
   }
-  return sqlDb;
+  return db;
 }
 
 export async function inicializarDB() {
-  if (sqlDb) return;
+  const database = getDB();
 
   try {
-    SQL = await initSqlJs();
-
-    let data;
-    if (fs.existsSync(DB_PATH)) {
-      const fileBuffer = fs.readFileSync(DB_PATH);
-      data = new Uint8Array(fileBuffer);
-    }
-
-    const db = new SQL.Database(data);
-    sqlDb = new DBWrapper(db);
-
-    logger.info(`📁 BD: ${DB_PATH}`);
-
-    sqlDb.exec(`
+    database.exec(`
       CREATE TABLE IF NOT EXISTS usuarios (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         numero_telefono TEXT UNIQUE NOT NULL,
@@ -142,7 +48,7 @@ export async function inicializarDB() {
       )
     `);
 
-    sqlDb.exec(`
+    database.exec(`
       CREATE TABLE IF NOT EXISTS facturas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         usuario_id INTEGER NOT NULL,
@@ -163,7 +69,7 @@ export async function inicializarDB() {
       )
     `);
 
-    sqlDb.exec(`
+    database.exec(`
       CREATE TABLE IF NOT EXISTS conversaciones (
         numero_telefono TEXT PRIMARY KEY,
         paso TEXT NOT NULL,
@@ -172,14 +78,14 @@ export async function inicializarDB() {
       )
     `);
 
-    sqlDb.exec(`
+    database.exec(`
       CREATE TABLE IF NOT EXISTS mensajes_procesados (
         message_id TEXT PRIMARY KEY,
         procesado_en INTEGER NOT NULL
       )
     `);
 
-    sqlDb.exec(`
+    database.exec(`
       CREATE TABLE IF NOT EXISTS pagos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         usuario_id INTEGER,
@@ -192,7 +98,7 @@ export async function inicializarDB() {
       )
     `);
 
-    sqlDb.exec(`
+    database.exec(`
       CREATE TABLE IF NOT EXISTS conversaciones_whatsapp (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         numero_whatsapp TEXT UNIQUE NOT NULL,
@@ -205,7 +111,7 @@ export async function inicializarDB() {
       )
     `);
 
-    sqlDb.exec(`
+    database.exec(`
       CREATE TABLE IF NOT EXISTS comprobantes_pago (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         numero_whatsapp TEXT NOT NULL,
@@ -229,10 +135,10 @@ export async function inicializarDB() {
 
 export function limpiarDatos() {
   try {
-    if (!sqlDb) return;
+    const database = getDB();
     const ahora = Math.floor(Date.now() / 1000);
-    sqlDb.prepare(`DELETE FROM conversaciones WHERE ultima_actividad < ?`).run(ahora - 900);
-    sqlDb.prepare(`DELETE FROM mensajes_procesados WHERE procesado_en < ?`).run(ahora - 86400);
+    database.prepare(`DELETE FROM conversaciones WHERE ultima_actividad < ?`).run(ahora - 900);
+    database.prepare(`DELETE FROM mensajes_procesados WHERE procesado_en < ?`).run(ahora - 86400);
     logger.debug('🧹 Cleaned');
   } catch (error) {
     logger.error(`Cleanup: ${error.message}`);
@@ -319,9 +225,9 @@ export function registrarPago(usuarioID, mpPaymentID, mpSubscriptionID, monto, e
 }
 
 export function cerrarDB() {
-  if (sqlDb) {
-    sqlDb.close();
-    sqlDb = null;
+  if (db) {
+    db.close();
+    db = null;
   }
 }
 
