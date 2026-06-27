@@ -1,4 +1,4 @@
-import Database from 'sqlite';
+import initSqlJs from 'sql.js/dist/sql-wasm.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -7,28 +7,120 @@ import { logger } from './logger.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DB_PATH = path.join(__dirname, '../data/facturacion.db');
 
-let db = null;
+let SQL = null;
+let sqlDb = null;
+
+class DBWrapper {
+  constructor(database) {
+    this.db = database;
+  }
+
+  exec(sql) {
+    try {
+      this.db.run(sql);
+      this.save();
+    } catch (e) {
+      logger.error(`DB exec: ${e.message}`);
+      throw e;
+    }
+  }
+
+  prepare(sql) {
+    const db = this.db;
+    const self = this;
+    return {
+      run(...params) {
+        try {
+          db.run(sql, params);
+          self.save();
+          return { changes: 1 };
+        } catch (e) {
+          logger.error(`DB run: ${e.message}`);
+          throw e;
+        }
+      },
+      get(...params) {
+        try {
+          const stmt = db.prepare(sql);
+          stmt.bind(params);
+          if (stmt.step()) {
+            const row = stmt.getAsObject();
+            stmt.free();
+            return row;
+          }
+          stmt.free();
+          return undefined;
+        } catch (e) {
+          logger.error(`DB get: ${e.message}`);
+          throw e;
+        }
+      },
+      all(...params) {
+        try {
+          const stmt = db.prepare(sql);
+          stmt.bind(params);
+          const results = [];
+          while (stmt.step()) {
+            results.push(stmt.getAsObject());
+          }
+          stmt.free();
+          return results;
+        } catch (e) {
+          logger.error(`DB all: ${e.message}`);
+          throw e;
+        }
+      }
+    };
+  }
+
+  pragma() {}
+
+  save() {
+    try {
+      const dir = path.dirname(DB_PATH);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      const data = this.db.export();
+      fs.writeFileSync(DB_PATH, Buffer.from(data));
+    } catch (e) {
+      logger.error(`DB save: ${e.message}`);
+    }
+  }
+
+  close() {
+    if (this.db) {
+      this.save();
+      this.db.close();
+    }
+  }
+}
 
 export function getDB() {
-  if (!db) {
-    throw new Error('Database not initialized. Call inicializarDB() first.');
+  if (!sqlDb) {
+    throw new Error('DB not initialized');
   }
-  return db;
+  return sqlDb;
 }
 
 export async function inicializarDB() {
-  if (db) return;
+  if (sqlDb) return;
 
   try {
-    const dir = path.dirname(DB_PATH);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
+    SQL = await initSqlJs();
+
+    let data;
+    if (fs.existsSync(DB_PATH)) {
+      const fileBuffer = fs.readFileSync(DB_PATH);
+      data = new Uint8Array(fileBuffer);
     }
 
-    db = new Database(DB_PATH);
-    logger.info(`📁 Base de datos: ${DB_PATH}`);
+    const db = new SQL.Database(data);
+    sqlDb = new DBWrapper(db);
 
-    db.exec(`
+    logger.info(`📁 BD: ${DB_PATH}`);
+
+    sqlDb.exec(`
       CREATE TABLE IF NOT EXISTS usuarios (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         numero_telefono TEXT UNIQUE NOT NULL,
@@ -50,7 +142,7 @@ export async function inicializarDB() {
       )
     `);
 
-    db.exec(`
+    sqlDb.exec(`
       CREATE TABLE IF NOT EXISTS facturas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         usuario_id INTEGER NOT NULL,
@@ -71,7 +163,7 @@ export async function inicializarDB() {
       )
     `);
 
-    db.exec(`
+    sqlDb.exec(`
       CREATE TABLE IF NOT EXISTS conversaciones (
         numero_telefono TEXT PRIMARY KEY,
         paso TEXT NOT NULL,
@@ -80,14 +172,14 @@ export async function inicializarDB() {
       )
     `);
 
-    db.exec(`
+    sqlDb.exec(`
       CREATE TABLE IF NOT EXISTS mensajes_procesados (
         message_id TEXT PRIMARY KEY,
         procesado_en INTEGER NOT NULL
       )
     `);
 
-    db.exec(`
+    sqlDb.exec(`
       CREATE TABLE IF NOT EXISTS pagos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         usuario_id INTEGER,
@@ -100,7 +192,7 @@ export async function inicializarDB() {
       )
     `);
 
-    db.exec(`
+    sqlDb.exec(`
       CREATE TABLE IF NOT EXISTS conversaciones_whatsapp (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         numero_whatsapp TEXT UNIQUE NOT NULL,
@@ -113,7 +205,7 @@ export async function inicializarDB() {
       )
     `);
 
-    db.exec(`
+    sqlDb.exec(`
       CREATE TABLE IF NOT EXISTS comprobantes_pago (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         numero_whatsapp TEXT NOT NULL,
@@ -128,77 +220,56 @@ export async function inicializarDB() {
       )
     `);
 
-    logger.info('✅ Tablas de BD creadas/verificadas');
+    logger.info('✅ BD tablas OK');
   } catch (error) {
-    logger.error(`Error al inicializar BD: ${error.message}`);
+    logger.error(`BD init: ${error.message}`);
     throw error;
   }
 }
 
 export function limpiarDatos() {
   try {
-    if (!db) return;
-
+    if (!sqlDb) return;
     const ahora = Math.floor(Date.now() / 1000);
-    const hace15Min = ahora - (15 * 60);
-    const hace24Horas = ahora - (24 * 60 * 60);
-
-    db.prepare(`DELETE FROM conversaciones WHERE ultima_actividad < ?`).run(hace15Min);
-    db.prepare(`DELETE FROM mensajes_procesados WHERE procesado_en < ?`).run(hace24Horas);
-
-    logger.debug('🧹 Datos viejos limpiados');
+    sqlDb.prepare(`DELETE FROM conversaciones WHERE ultima_actividad < ?`).run(ahora - 900);
+    sqlDb.prepare(`DELETE FROM mensajes_procesados WHERE procesado_en < ?`).run(ahora - 86400);
+    logger.debug('🧹 Cleaned');
   } catch (error) {
-    logger.error(`Error al limpiar datos: ${error.message}`);
+    logger.error(`Cleanup: ${error.message}`);
   }
 }
 
 export function obtenerUsuario(numeroDeTelefono) {
-  const database = getDB();
-  return database.prepare(`SELECT * FROM usuarios WHERE numero_telefono = ?`).get(numeroDeTelefono);
+  return getDB().prepare(`SELECT * FROM usuarios WHERE numero_telefono = ?`).get(numeroDeTelefono);
 }
 
 export function obtenerUsuarioPorID(usuarioID) {
-  const database = getDB();
-  return database.prepare(`SELECT * FROM usuarios WHERE id = ?`).get(usuarioID);
+  return getDB().prepare(`SELECT * FROM usuarios WHERE id = ?`).get(usuarioID);
 }
 
 export function crearUsuario(numeroDeTelefono, datos = {}) {
-  const database = getDB();
   const ahora = Math.floor(Date.now() / 1000);
-
-  return database.prepare(`
+  return getDB().prepare(`
     INSERT INTO usuarios (numero_telefono, nombre, plan, fecha_registro, activo, limite_facturas_mes)
     VALUES (?, ?, ?, ?, ?, ?)
   `).run(
-    numeroDeTelefono,
-    datos.nombre || null,
-    datos.plan || 'basico',
-    ahora,
-    datos.activo || 0,
+    numeroDeTelefono, datos.nombre || null, datos.plan || 'basico', ahora, datos.activo || 0,
     datos.plan === 'premium' ? -1 : 100
   );
 }
 
 export function actualizarUsuario(usuarioID, datos) {
-  const database = getDB();
   const campos = Object.keys(datos).map(k => `${k} = ?`).join(', ');
-  const valores = Object.values(datos);
-
-  return database.prepare(`UPDATE usuarios SET ${campos} WHERE id = ?`).run(...valores, usuarioID);
+  return getDB().prepare(`UPDATE usuarios SET ${campos} WHERE id = ?`).run(...Object.values(datos), usuarioID);
 }
 
 export function obtenerUltimaFactura(usuarioID) {
-  const database = getDB();
-  return database.prepare(`
-    SELECT * FROM facturas WHERE usuario_id = ? ORDER BY creado_en DESC LIMIT 1
-  `).get(usuarioID);
+  return getDB().prepare(`SELECT * FROM facturas WHERE usuario_id = ? ORDER BY creado_en DESC LIMIT 1`).get(usuarioID);
 }
 
 export function crearFactura(usuarioID, datos) {
-  const database = getDB();
   const ahora = Math.floor(Date.now() / 1000);
-
-  return database.prepare(`
+  return getDB().prepare(`
     INSERT INTO facturas (
       usuario_id, numero_telefono, fecha_emision, tipo_comprobante, numero_factura,
       razon_social_cliente, documento_cliente, concepto, importe, cae, vencimiento_cae,
@@ -212,63 +283,45 @@ export function crearFactura(usuarioID, datos) {
 }
 
 export function obtenerFacturasDeUsuario(usuarioID, limite = 20) {
-  const database = getDB();
-  return database.prepare(`
-    SELECT * FROM facturas WHERE usuario_id = ? ORDER BY creado_en DESC LIMIT ?
-  `).all(usuarioID, limite);
+  return getDB().prepare(`SELECT * FROM facturas WHERE usuario_id = ? ORDER BY creado_en DESC LIMIT ?`).all(usuarioID, limite);
 }
 
 export function obtenerConversacion(numeroDeTelefono) {
-  const database = getDB();
-  return database.prepare(`SELECT * FROM conversaciones WHERE numero_telefono = ?`).get(numeroDeTelefono);
+  return getDB().prepare(`SELECT * FROM conversaciones WHERE numero_telefono = ?`).get(numeroDeTelefono);
 }
 
 export function guardarConversacion(numeroDeTelefono, paso, datos = {}) {
-  const database = getDB();
   const ahora = Math.floor(Date.now() / 1000);
-  const conversacionExistente = obtenerConversacion(numeroDeTelefono);
-
-  if (conversacionExistente) {
-    database.prepare(`
-      UPDATE conversaciones SET paso = ?, datos = ?, ultima_actividad = ? WHERE numero_telefono = ?
-    `).run(paso, JSON.stringify(datos), ahora, numeroDeTelefono);
+  const existe = obtenerConversacion(numeroDeTelefono);
+  if (existe) {
+    getDB().prepare(`UPDATE conversaciones SET paso = ?, datos = ?, ultima_actividad = ? WHERE numero_telefono = ?`).run(paso, JSON.stringify(datos), ahora, numeroDeTelefono);
   } else {
-    database.prepare(`
-      INSERT INTO conversaciones (numero_telefono, paso, datos, ultima_actividad) VALUES (?, ?, ?, ?)
-    `).run(numeroDeTelefono, paso, JSON.stringify(datos), ahora);
+    getDB().prepare(`INSERT INTO conversaciones (numero_telefono, paso, datos, ultima_actividad) VALUES (?, ?, ?, ?)`).run(numeroDeTelefono, paso, JSON.stringify(datos), ahora);
   }
 }
 
 export function borrarConversacion(numeroDeTelefono) {
-  const database = getDB();
-  database.prepare(`DELETE FROM conversaciones WHERE numero_telefono = ?`).run(numeroDeTelefono);
+  getDB().prepare(`DELETE FROM conversaciones WHERE numero_telefono = ?`).run(numeroDeTelefono);
 }
 
 export function yaProcesado(messageID) {
-  const database = getDB();
-  return database.prepare(`SELECT * FROM mensajes_procesados WHERE message_id = ?`).get(messageID) !== undefined;
+  return getDB().prepare(`SELECT * FROM mensajes_procesados WHERE message_id = ?`).get(messageID) !== undefined;
 }
 
 export function marcarComoProcesado(messageID) {
-  const database = getDB();
   const ahora = Math.floor(Date.now() / 1000);
-  database.prepare(`INSERT OR IGNORE INTO mensajes_procesados (message_id, procesado_en) VALUES (?, ?)`).run(messageID, ahora);
+  getDB().prepare(`INSERT OR IGNORE INTO mensajes_procesados (message_id, procesado_en) VALUES (?, ?)`).run(messageID, ahora);
 }
 
 export function registrarPago(usuarioID, mpPaymentID, mpSubscriptionID, monto, estado) {
-  const database = getDB();
   const ahora = Math.floor(Date.now() / 1000);
-
-  return database.prepare(`
-    INSERT INTO pagos (usuario_id, mp_payment_id, mp_subscription_id, monto, estado, fecha)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(usuarioID, mpPaymentID, mpSubscriptionID, monto, estado, ahora);
+  return getDB().prepare(`INSERT INTO pagos (usuario_id, mp_payment_id, mp_subscription_id, monto, estado, fecha) VALUES (?, ?, ?, ?, ?, ?)`).run(usuarioID, mpPaymentID, mpSubscriptionID, monto, estado, ahora);
 }
 
 export function cerrarDB() {
-  if (db) {
-    db.close();
-    db = null;
+  if (sqlDb) {
+    sqlDb.close();
+    sqlDb = null;
   }
 }
 
