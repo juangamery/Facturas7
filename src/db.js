@@ -1,4 +1,4 @@
-import initSqlJs from 'sql.js';
+import Database from 'sqlite';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -7,112 +7,7 @@ import { logger } from './logger.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DB_PATH = path.join(__dirname, '../data/facturacion.db');
 
-let SQL = null;
 let db = null;
-
-class DBWrapper {
-  constructor(sqlJs) {
-    this.sqlJs = sqlJs;
-    this.sqlDb = null;
-    this.loadFromFile();
-  }
-
-  loadFromFile() {
-    try {
-      if (fs.existsSync(DB_PATH)) {
-        const data = fs.readFileSync(DB_PATH);
-        this.sqlDb = new this.sqlJs.Database(new Uint8Array(data));
-      } else {
-        this.sqlDb = new this.sqlJs.Database();
-      }
-    } catch (e) {
-      logger.error(`Error loading DB: ${e.message}`);
-      this.sqlDb = new this.sqlJs.Database();
-    }
-  }
-
-  saveToFile() {
-    try {
-      const dir = path.dirname(DB_PATH);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-      const data = this.sqlDb.export();
-      fs.writeFileSync(DB_PATH, Buffer.from(data));
-    } catch (e) {
-      logger.error(`Error saving DB: ${e.message}`);
-    }
-  }
-
-  exec(sql) {
-    try {
-      this.sqlDb.run(sql);
-      this.saveToFile();
-    } catch (e) {
-      logger.error(`DB exec error: ${e.message}`);
-      throw e;
-    }
-  }
-
-  prepare(sql) {
-    const sqlDb = this.sqlDb;
-    const self = this;
-    return {
-      run(...params) {
-        try {
-          sqlDb.run(sql, params);
-          self.saveToFile();
-          return { changes: 1 };
-        } catch (e) {
-          logger.error(`DB run error: ${e.message}`);
-          throw e;
-        }
-      },
-      get(...params) {
-        try {
-          const stmt = sqlDb.prepare(sql);
-          stmt.bind(params);
-          if (stmt.step()) {
-            const row = stmt.getAsObject();
-            stmt.free();
-            return row;
-          }
-          stmt.free();
-          return undefined;
-        } catch (e) {
-          logger.error(`DB get error: ${e.message}`);
-          throw e;
-        }
-      },
-      all(...params) {
-        try {
-          const stmt = sqlDb.prepare(sql);
-          stmt.bind(params);
-          const results = [];
-          while (stmt.step()) {
-            results.push(stmt.getAsObject());
-          }
-          stmt.free();
-          return results;
-        } catch (e) {
-          logger.error(`DB all error: ${e.message}`);
-          throw e;
-        }
-      }
-    };
-  }
-
-  pragma(cmd) {
-  }
-
-  close() {
-    if (this.sqlDb) {
-      this.saveToFile();
-      this.sqlDb.close();
-      this.sqlDb = null;
-    }
-  }
-}
 
 export function getDB() {
   if (!db) {
@@ -125,18 +20,15 @@ export async function inicializarDB() {
   if (db) return;
 
   try {
-    SQL = await initSqlJs();
-    db = new DBWrapper(SQL);
+    const dir = path.dirname(DB_PATH);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+
+    db = new Database(DB_PATH);
     logger.info(`📁 Base de datos: ${DB_PATH}`);
-  } catch (error) {
-    logger.error(`Error al inicializar BD: ${error.message}`);
-    throw error;
-  }
 
-  const database = getDB();
-
-  try {
-    database.exec(`
+    db.exec(`
       CREATE TABLE IF NOT EXISTS usuarios (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         numero_telefono TEXT UNIQUE NOT NULL,
@@ -158,7 +50,7 @@ export async function inicializarDB() {
       )
     `);
 
-    database.exec(`
+    db.exec(`
       CREATE TABLE IF NOT EXISTS facturas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         usuario_id INTEGER NOT NULL,
@@ -179,7 +71,7 @@ export async function inicializarDB() {
       )
     `);
 
-    database.exec(`
+    db.exec(`
       CREATE TABLE IF NOT EXISTS conversaciones (
         numero_telefono TEXT PRIMARY KEY,
         paso TEXT NOT NULL,
@@ -188,14 +80,14 @@ export async function inicializarDB() {
       )
     `);
 
-    database.exec(`
+    db.exec(`
       CREATE TABLE IF NOT EXISTS mensajes_procesados (
         message_id TEXT PRIMARY KEY,
         procesado_en INTEGER NOT NULL
       )
     `);
 
-    database.exec(`
+    db.exec(`
       CREATE TABLE IF NOT EXISTS pagos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         usuario_id INTEGER,
@@ -208,7 +100,7 @@ export async function inicializarDB() {
       )
     `);
 
-    database.exec(`
+    db.exec(`
       CREATE TABLE IF NOT EXISTS conversaciones_whatsapp (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         numero_whatsapp TEXT UNIQUE NOT NULL,
@@ -221,7 +113,7 @@ export async function inicializarDB() {
       )
     `);
 
-    database.exec(`
+    db.exec(`
       CREATE TABLE IF NOT EXISTS comprobantes_pago (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         numero_whatsapp TEXT NOT NULL,
@@ -238,22 +130,21 @@ export async function inicializarDB() {
 
     logger.info('✅ Tablas de BD creadas/verificadas');
   } catch (error) {
-    logger.error(`Error al crear tablas: ${error.message}`);
+    logger.error(`Error al inicializar BD: ${error.message}`);
     throw error;
   }
 }
 
 export function limpiarDatos() {
   try {
-    const database = db;
-    if (!database) return;
+    if (!db) return;
 
     const ahora = Math.floor(Date.now() / 1000);
     const hace15Min = ahora - (15 * 60);
     const hace24Horas = ahora - (24 * 60 * 60);
 
-    database.prepare(`DELETE FROM conversaciones WHERE ultima_actividad < ?`).run(hace15Min);
-    database.prepare(`DELETE FROM mensajes_procesados WHERE procesado_en < ?`).run(hace24Horas);
+    db.prepare(`DELETE FROM conversaciones WHERE ultima_actividad < ?`).run(hace15Min);
+    db.prepare(`DELETE FROM mensajes_procesados WHERE procesado_en < ?`).run(hace24Horas);
 
     logger.debug('🧹 Datos viejos limpiados');
   } catch (error) {
@@ -261,22 +152,18 @@ export function limpiarDatos() {
   }
 }
 
-// ==========================================
-// FUNCIONES HELPERS - USUARIOS
-// ==========================================
-
 export function obtenerUsuario(numeroDeTelefono) {
-  const database = db;
+  const database = getDB();
   return database.prepare(`SELECT * FROM usuarios WHERE numero_telefono = ?`).get(numeroDeTelefono);
 }
 
 export function obtenerUsuarioPorID(usuarioID) {
-  const database = db;
+  const database = getDB();
   return database.prepare(`SELECT * FROM usuarios WHERE id = ?`).get(usuarioID);
 }
 
 export function crearUsuario(numeroDeTelefono, datos = {}) {
-  const database = db;
+  const database = getDB();
   const ahora = Math.floor(Date.now() / 1000);
 
   return database.prepare(`
@@ -293,26 +180,22 @@ export function crearUsuario(numeroDeTelefono, datos = {}) {
 }
 
 export function actualizarUsuario(usuarioID, datos) {
-  const database = db;
+  const database = getDB();
   const campos = Object.keys(datos).map(k => `${k} = ?`).join(', ');
   const valores = Object.values(datos);
 
   return database.prepare(`UPDATE usuarios SET ${campos} WHERE id = ?`).run(...valores, usuarioID);
 }
 
-// ==========================================
-// FUNCIONES HELPERS - FACTURAS
-// ==========================================
-
 export function obtenerUltimaFactura(usuarioID) {
-  const database = db;
+  const database = getDB();
   return database.prepare(`
     SELECT * FROM facturas WHERE usuario_id = ? ORDER BY creado_en DESC LIMIT 1
   `).get(usuarioID);
 }
 
 export function crearFactura(usuarioID, datos) {
-  const database = db;
+  const database = getDB();
   const ahora = Math.floor(Date.now() / 1000);
 
   return database.prepare(`
@@ -329,23 +212,19 @@ export function crearFactura(usuarioID, datos) {
 }
 
 export function obtenerFacturasDeUsuario(usuarioID, limite = 20) {
-  const database = db;
+  const database = getDB();
   return database.prepare(`
     SELECT * FROM facturas WHERE usuario_id = ? ORDER BY creado_en DESC LIMIT ?
   `).all(usuarioID, limite);
 }
 
-// ==========================================
-// FUNCIONES HELPERS - CONVERSACIONES
-// ==========================================
-
 export function obtenerConversacion(numeroDeTelefono) {
-  const database = db;
+  const database = getDB();
   return database.prepare(`SELECT * FROM conversaciones WHERE numero_telefono = ?`).get(numeroDeTelefono);
 }
 
 export function guardarConversacion(numeroDeTelefono, paso, datos = {}) {
-  const database = db;
+  const database = getDB();
   const ahora = Math.floor(Date.now() / 1000);
   const conversacionExistente = obtenerConversacion(numeroDeTelefono);
 
@@ -361,31 +240,23 @@ export function guardarConversacion(numeroDeTelefono, paso, datos = {}) {
 }
 
 export function borrarConversacion(numeroDeTelefono) {
-  const database = db;
+  const database = getDB();
   database.prepare(`DELETE FROM conversaciones WHERE numero_telefono = ?`).run(numeroDeTelefono);
 }
 
-// ==========================================
-// FUNCIONES HELPERS - MENSAJES PROCESADOS
-// ==========================================
-
 export function yaProcesado(messageID) {
-  const database = db;
+  const database = getDB();
   return database.prepare(`SELECT * FROM mensajes_procesados WHERE message_id = ?`).get(messageID) !== undefined;
 }
 
 export function marcarComoProcesado(messageID) {
-  const database = db;
+  const database = getDB();
   const ahora = Math.floor(Date.now() / 1000);
   database.prepare(`INSERT OR IGNORE INTO mensajes_procesados (message_id, procesado_en) VALUES (?, ?)`).run(messageID, ahora);
 }
 
-// ==========================================
-// FUNCIONES HELPERS - PAGOS
-// ==========================================
-
 export function registrarPago(usuarioID, mpPaymentID, mpSubscriptionID, monto, estado) {
-  const database = db;
+  const database = getDB();
   const ahora = Math.floor(Date.now() / 1000);
 
   return database.prepare(`
@@ -393,10 +264,6 @@ export function registrarPago(usuarioID, mpPaymentID, mpSubscriptionID, monto, e
     VALUES (?, ?, ?, ?, ?, ?)
   `).run(usuarioID, mpPaymentID, mpSubscriptionID, monto, estado, ahora);
 }
-
-// ==========================================
-// CERRAR BD
-// ==========================================
 
 export function cerrarDB() {
   if (db) {
