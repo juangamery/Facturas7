@@ -1,8 +1,11 @@
+[install]
+pkgs = ["python311", "pkg-config", "sqlite"]
+
 [build]
 cmd = "npm ci"
 
-[install]
-pkgs = ["python311", "pkg-config", "sqlite", "nodejs_22"]
+[env]
+PYTHON = "/usr/bin/python3"
 
 [start]
 cmd = "node src/index.js"
