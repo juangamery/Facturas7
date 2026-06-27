@@ -5,12 +5,8 @@
 
 import bcrypt from 'bcrypt';
 import { logger } from '../logger.js';
-import dotenv from 'dotenv';
 
-// Asegurar que .env está cargado
-dotenv.config();
-
-// Hash de contraseña admin (configurar en .env)
+// Hash de contraseña admin (leer de env vars)
 const ADMIN_USER = process.env.ADMIN_USER || 'admin';
 const ADMIN_PASSWORD_PLAIN = process.env.ADMIN_PASSWORD || 'admin123';
 let ADMIN_PASSWORD_HASH = null;
