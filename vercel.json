@@ -1,6 +1,14 @@
 {
-  "buildCommand": "cd frontend && npm install && npm run build && cd ..",
-  "devCommand": "npm run dev",
-  "outputDirectory": "frontend/dist",
-  "framework": "vite"
+  "buildCommand": "cd frontend && npm install && npm run build",
+  "functions": {
+    "api/handler.js": {
+      "runtime": "nodejs22.x"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/api/handler.js"
+    }
+  ]
 }
