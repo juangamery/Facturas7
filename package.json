@@ -7,6 +7,7 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node src/index.js",
+    "build": "cd frontend && npm run build && cd ..",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
@@ -22,7 +23,7 @@
     "@anthropic-ai/sdk": "^0.28.0",
     "axios": "^1.6.5",
     "bcrypt": "^5.1.1",
-    "better-sqlite3": "^9.2.2",
+    "@supabase/supabase-js": "^2.39.0",
     "dotenv": "^16.3.1",
     "ejs": "^3.1.9",
     "express": "^4.18.2",
@@ -38,5 +39,6 @@
   },
   "engines": {
     "node": "18.x"
-  }
+  },
+  "type": "module"
 }
