@@ -5,32 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dashboard - Facturación</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    .stats-grid { @apply grid grid-cols-4 gap-4 mb-8; }
-    .stat-card { @apply bg-slate-800 p-6 rounded-lg border border-slate-700; }
-    .stat-number { @apply text-3xl font-bold text-blue-400; }
-    .stat-label { @apply text-sm text-slate-400 mt-2; }
-    .card { @apply bg-slate-800 rounded-lg border border-slate-700 mb-6; }
-    .card-header { @apply px-6 py-4 font-bold text-lg border-b border-slate-700; }
-    .card-body { @apply p-6; }
-    .btn { @apply px-4 py-2 rounded-lg font-medium transition; }
-    .btn-primary { @apply bg-blue-600 text-white hover:bg-blue-700; }
-    .btn-secondary { @apply bg-slate-700 text-white hover:bg-slate-600; }
-    .empty-state { @apply text-center py-8; }
-    .empty-state-icon { @apply text-4xl mb-4; }
-    .table { @apply w-full; }
-    .table thead { @apply border-b border-slate-700; }
-    .table th { @apply text-left px-4 py-2 text-slate-300 font-semibold; }
-    .table td { @apply px-4 py-3 border-b border-slate-700/50; }
-    code { @apply bg-slate-900 px-2 py-1 rounded text-sm text-slate-300; }
-  </style>
 </head>
 <body class="bg-slate-950 text-white">
   <!-- NAVBAR -->
   <nav class="sticky top-0 z-50 border-b border-slate-800 bg-slate-900/95 backdrop-blur">
     <div class="flex items-center justify-between px-6 py-4 max-w-7xl mx-auto w-full">
-      <a class="text-xl font-bold text-blue-500" href="/admin/dashboard">📱 Facturación</a>
-      <div class="flex gap-1">
+      <a class="text-xl font-bold text-blue-400" href="/admin/dashboard">📱 Facturación</a>
+      <div class="flex gap-2">
         <a class="px-4 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800 transition" href="/admin/dashboard">📊 Dashboard</a>
         <a class="px-4 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800 transition" href="/admin/clientes">👥 Clientes</a>
         <a class="px-4 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800 transition" href="/admin/facturas">📄 Facturas</a>
@@ -41,103 +22,174 @@
 
   <!-- MAIN CONTENT -->
   <main class="p-8 max-w-7xl mx-auto">
-    <div class="flex justify-between items-center mb-8">
-      <h1 class="text-4xl font-bold">📊 Dashboard</h1>
-      <a href="/admin/clientes/nuevo" class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium">+ Nuevo Cliente</a>
+    <!-- HEADER -->
+    <div class="flex justify-between items-center mb-12">
+      <div>
+        <h1 class="text-4xl font-bold text-white mb-2">Dashboard</h1>
+        <p class="text-slate-400">Resumen de tu actividad de facturación</p>
+      </div>
+      <a href="/admin/clientes/nuevo" class="px-6 py-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold transition shadow-lg hover:shadow-blue-600/50">+ Nuevo Cliente</a>
     </div>
 
-  <!-- STATS GRID -->
-  <div class="stats-grid">
-    <div class="stat-card">
-      <div class="stat-number"><%= usuariosActivos || 0 %></div>
-      <div class="stat-label">Usuarios Activos</div>
-    </div>
-
-    <div class="stat-card">
-      <div class="stat-number"><%= usuariosVencidos || 0 %></div>
-      <div class="stat-label">Vencidos</div>
-    </div>
-
-    <div class="stat-card">
-      <div class="stat-number"><%= facturasHoy || 0 %></div>
-      <div class="stat-label">Facturas Hoy</div>
-    </div>
-
-    <div class="stat-card">
-      <div class="stat-number"><%= facturasDelMes || 0 %></div>
-      <div class="stat-label">Facturas Mes</div>
-    </div>
-  </div>
-
-  <!-- PRÓXIMOS A VENCER -->
-  <div class="card">
-    <div class="card-header">⏰ Próximos a Vencer (7 días)</div>
-    <div class="card-body">
-      <% if (proximosAVencer && proximosAVencer.length > 0) { %>
-      <ul style="list-style: none; padding: 0;">
-        <% proximosAVencer.forEach(usuario => { %>
-        <li style="padding: 1rem; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center;">
+    <!-- STATS GRID -->
+    <div class="grid grid-cols-4 gap-6 mb-12">
+      <!-- Usuarios Activos -->
+      <div class="bg-gradient-to-br from-blue-600/20 to-blue-600/5 border border-blue-500/30 rounded-lg p-6 hover:border-blue-500/60 transition">
+        <div class="flex items-center justify-between">
           <div>
-            <strong style="color: #1f2937;"><%= usuario.nombre %></strong>
-            <p style="font-size: 0.875rem; color: #6b7280; margin-top: 0.25rem;">
-              Vence: <%= new Date(usuario.fecha_vencimiento * 1000).toLocaleDateString('es-AR') %>
-            </p>
+            <p class="text-blue-300 text-sm font-medium">Usuarios Activos</p>
+            <p class="text-4xl font-bold text-white mt-2"><%= usuariosActivos || 0 %></p>
           </div>
-          <a href="/admin/clientes/<%= usuario.id %>" class="btn btn-secondary" style="font-size: 0.875rem;">Ver</a>
-        </li>
-        <% }); %>
-      </ul>
-      <% } else { %>
-      <div class="empty-state">
-        <p style="margin: 0; color: #6b7280;">✅ Sin usuarios próximos a vencer</p>
+          <div class="text-4xl opacity-20">👥</div>
+        </div>
       </div>
-      <% } %>
-    </div>
-  </div>
 
-  <!-- ÚLTIMAS FACTURAS -->
-  <div class="card" style="margin-top: 2rem;">
-    <div class="card-header">📄 Últimas Facturas</div>
-    <div class="card-body">
-      <% if (ultimasFacturas && ultimasFacturas.length > 0) { %>
-      <table class="table">
-        <thead>
-          <tr>
-            <th>Cliente</th>
-            <th>Número</th>
-            <th>Importe</th>
-            <th>Fecha</th>
-            <th>CAE</th>
-          </tr>
-        </thead>
-        <tbody>
-          <% ultimasFacturas.forEach(f => { %>
-          <tr>
-            <td style="font-weight: 500;"><%= f.nombre %></td>
-            <td><code><%= f.numero_factura %></code></td>
-            <td style="font-weight: 600; color: #059669;">$<%= f.importe.toLocaleString('es-AR') %></td>
-            <td><%= new Date(f.creado_en * 1000).toLocaleDateString('es-AR') %></td>
-            <td><code style="font-size: 0.75rem;"><%= f.cae.substring(0, 10) %>...</code></td>
-          </tr>
-          <% }); %>
-        </tbody>
-      </table>
-      <% } else { %>
-      <div class="empty-state">
-        <div class="empty-state-icon">📄</div>
-        <h3>Sin facturas registradas</h3>
-        <p>Crea tu primer cliente y emite una factura por WhatsApp.</p>
-        <a href="/admin/clientes" class="btn btn-primary">Ver Clientes</a>
+      <!-- Vencidos -->
+      <div class="bg-gradient-to-br from-red-600/20 to-red-600/5 border border-red-500/30 rounded-lg p-6 hover:border-red-500/60 transition">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-red-300 text-sm font-medium">Vencidos</p>
+            <p class="text-4xl font-bold text-white mt-2"><%= usuariosVencidos || 0 %></p>
+          </div>
+          <div class="text-4xl opacity-20">⏰</div>
+        </div>
       </div>
-      <% } %>
-    </div>
-  </div>
 
+      <!-- Facturas Hoy -->
+      <div class="bg-gradient-to-br from-green-600/20 to-green-600/5 border border-green-500/30 rounded-lg p-6 hover:border-green-500/60 transition">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-green-300 text-sm font-medium">Facturas Hoy</p>
+            <p class="text-4xl font-bold text-white mt-2"><%= facturasHoy || 0 %></p>
+          </div>
+          <div class="text-4xl opacity-20">📄</div>
+        </div>
+      </div>
+
+      <!-- Facturas Mes -->
+      <div class="bg-gradient-to-br from-purple-600/20 to-purple-600/5 border border-purple-500/30 rounded-lg p-6 hover:border-purple-500/60 transition">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-purple-300 text-sm font-medium">Facturas Mes</p>
+            <p class="text-4xl font-bold text-white mt-2"><%= facturasDelMes || 0 %></p>
+          </div>
+          <div class="text-4xl opacity-20">📊</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TWO COLUMN LAYOUT -->
+    <div class="grid grid-cols-2 gap-6">
+      <!-- PRÓXIMOS A VENCER -->
+      <div class="bg-slate-800/50 border border-slate-700 rounded-lg overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-700 bg-slate-800/80">
+          <h2 class="text-lg font-bold flex items-center gap-2">⏰ Próximos a Vencer</h2>
+          <p class="text-slate-400 text-sm mt-1">(7 días)</p>
+        </div>
+        <div class="p-6">
+          <% if (proximosAVencer && proximosAVencer.length > 0) { %>
+          <div class="space-y-3">
+            <% proximosAVencer.slice(0, 5).forEach(usuario => { %>
+            <div class="flex items-center justify-between p-4 bg-slate-700/30 rounded-lg border border-slate-700 hover:border-orange-500/50 transition">
+              <div class="flex-1">
+                <p class="font-semibold text-white"><%= usuario.nombre %></p>
+                <p class="text-sm text-slate-400">
+                  Vence: <span class="text-orange-400"><%= new Date(usuario.fecha_vencimiento * 1000).toLocaleDateString('es-AR') %></span>
+                </p>
+              </div>
+              <a href="/admin/clientes/<%= usuario.id %>" class="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-sm font-medium transition">Ver</a>
+            </div>
+            <% }); %>
+          </div>
+          <% } else { %>
+          <div class="text-center py-8 text-slate-400">
+            <p class="text-2xl mb-2">✅</p>
+            <p>Sin usuarios próximos a vencer</p>
+          </div>
+          <% } %>
+        </div>
+      </div>
+
+      <!-- ESTADÍSTICAS RÁPIDAS -->
+      <div class="bg-slate-800/50 border border-slate-700 rounded-lg overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-700 bg-slate-800/80">
+          <h2 class="text-lg font-bold flex items-center gap-2">📈 Información Rápida</h2>
+        </div>
+        <div class="p-6">
+          <div class="space-y-4">
+            <div class="flex items-center justify-between p-4 bg-blue-600/10 border border-blue-500/30 rounded-lg">
+              <div>
+                <p class="text-sm text-blue-300">Total de Clientes</p>
+                <p class="text-2xl font-bold text-white"><%= usuariosActivos || 0 %></p>
+              </div>
+              <div class="text-3xl">👥</div>
+            </div>
+            <div class="flex items-center justify-between p-4 bg-green-600/10 border border-green-500/30 rounded-lg">
+              <div>
+                <p class="text-sm text-green-300">Facturas Emitidas</p>
+                <p class="text-2xl font-bold text-white"><%= facturasDelMes || 0 %></p>
+              </div>
+              <div class="text-3xl">📊</div>
+            </div>
+            <div class="flex items-center justify-between p-4 bg-slate-700/50 border border-slate-600 rounded-lg">
+              <div>
+                <p class="text-sm text-slate-300">Hoy se emitieron</p>
+                <p class="text-2xl font-bold text-white"><%= facturasHoy || 0 %> facturas</p>
+              </div>
+              <div class="text-3xl">📄</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ÚLTIMAS FACTURAS -->
+    <div class="bg-slate-800/50 border border-slate-700 rounded-lg overflow-hidden mt-6">
+      <div class="px-6 py-4 border-b border-slate-700 bg-slate-800/80">
+        <h2 class="text-lg font-bold flex items-center gap-2">📄 Últimas Facturas Emitidas</h2>
+      </div>
+      <div class="p-6">
+        <% if (ultimasFacturas && ultimasFacturas.length > 0) { %>
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead>
+              <tr class="border-b border-slate-700">
+                <th class="text-left px-4 py-3 text-slate-300 font-semibold text-sm">Cliente</th>
+                <th class="text-left px-4 py-3 text-slate-300 font-semibold text-sm">Número</th>
+                <th class="text-left px-4 py-3 text-slate-300 font-semibold text-sm">Importe</th>
+                <th class="text-left px-4 py-3 text-slate-300 font-semibold text-sm">Fecha</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% ultimasFacturas.slice(0, 10).forEach(f => { %>
+              <tr class="border-b border-slate-700/50 hover:bg-slate-700/20 transition">
+                <td class="px-4 py-3 font-medium"><%= f.nombre %></td>
+                <td class="px-4 py-3"><code class="bg-slate-900 px-2 py-1 rounded text-sm text-slate-300"><%= f.numero_factura %></code></td>
+                <td class="px-4 py-3 font-semibold text-green-400">$<%= (f.importe || 0).toLocaleString('es-AR') %></td>
+                <td class="px-4 py-3 text-slate-400"><%= new Date((f.creado_en || 0) * 1000).toLocaleDateString('es-AR') %></td>
+              </tr>
+              <% }); %>
+            </tbody>
+          </table>
+        </div>
+        <div class="mt-4 text-center">
+          <a href="/admin/facturas" class="text-blue-400 hover:text-blue-300 font-medium">Ver todas las facturas →</a>
+        </div>
+        <% } else { %>
+        <div class="text-center py-12 text-slate-400">
+          <p class="text-3xl mb-4">📄</p>
+          <p class="text-lg">Sin facturas registradas</p>
+          <p class="text-sm mt-2">Crea tu primer cliente y emite una factura por WhatsApp</p>
+          <a href="/admin/clientes" class="inline-block mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white font-medium transition">Ver Clientes</a>
+        </div>
+        <% } %>
+      </div>
+    </div>
   </main>
 
   <!-- FOOTER -->
-  <footer class="text-center py-4 text-slate-500 text-sm border-t border-slate-800">
-    <p>&copy; 2024 Bot de Facturación. Todos los derechos reservados.</p>
+  <footer class="text-center py-8 text-slate-500 text-sm border-t border-slate-800 mt-12">
+    <p>&copy; 2024 Bot de Facturación Electrónica Argentina. Todos los derechos reservados.</p>
   </footer>
 </body>
 </html>
