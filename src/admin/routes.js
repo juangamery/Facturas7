@@ -613,7 +613,7 @@ router.get('/facturas/nuevo', (req, res) => {
 // POST /admin/facturas/nuevo - Crear factura
 router.post('/facturas/nuevo', async (req, res) => {
   try {
-    const { usuario_id, razon_social_cliente, concepto, importe } = req.body;
+    const { usuario_id, razon_social_cliente, documento_cliente, concepto, importe } = req.body;
     const db = getLocalDB();
 
     logger.debug(`Crear factura: usuario_id=${usuario_id}, razon_social=${razon_social_cliente}, importe=${importe}`);
