@@ -195,38 +195,56 @@ Do not include code blocks, markdown, or explanations. Return ONLY the JSON obje
     });
 
     const respuesta = completion.choices[0].message.content;
-    logger.info(`📝 Groq raw response: ${respuesta}`);
+    logger.debug(`📝 GROQ response: ${respuesta.substring(0, 200)}`);
 
-    // Extract first valid JSON object
+    // Robust JSON extraction - try multiple strategies
     let jsonObj = null;
+
+    // Strategy 1: Direct JSON.parse
     try {
-      // Try to find JSON object in response
-      const match = respuesta.match(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/);
-      if (match) {
-        jsonObj = JSON.parse(match[0]);
-      }
-    } catch (e) {
-      // Try eval as last resort (Groq might return valid JS)
-      try {
-        jsonObj = eval(`(${respuesta})`);
-      } catch (e2) {
-        logger.warn(`❌ Could not parse JSON from: ${respuesta.substring(0, 100)}`);
-        return { success: false, error: 'Invalid JSON response' };
+      jsonObj = JSON.parse(respuesta);
+      logger.debug('✓ Direct JSON parse succeeded');
+    } catch (e1) {
+      // Strategy 2: Extract JSON object from text
+      const jsonMatches = respuesta.match(/\{[^{}]*"[^"]*"[^{}]*:[^,{}]*[^{}]*\}/g);
+      if (jsonMatches && jsonMatches.length > 0) {
+        try {
+          jsonObj = JSON.parse(jsonMatches[0]);
+          logger.debug('✓ Extracted JSON from text');
+        } catch (e2) {
+          logger.warn(`JSON parse failed: ${e2.message}`);
+        }
       }
     }
 
-    if (!jsonObj) {
-      logger.warn(`❌ No JSON object found in: ${respuesta}`);
-      return { success: false, error: 'Could not extract JSON from response' };
+    // Validate extracted data
+    if (!jsonObj || typeof jsonObj !== 'object') {
+      logger.error(`❌ Invalid GROQ response: ${respuesta.substring(0, 100)}`);
+      return { success: false, error: 'Could not parse GROQ response' };
     }
 
-    logger.info(`🔍 Extracted JSON: ${JSON.stringify(jsonObj)}`);
-    const datos = jsonObj;
+    // Normalize field names (Spanish/English)
+    const cuit = jsonObj.cuit || jsonObj.CUIT;
+    const concepto = jsonObj.concepto || jsonObj.concept || jsonObj.Concept || '';
+    const importe = parseFloat(jsonObj.importe || jsonObj.amount || jsonObj.Amount || 0);
 
-    // Accept both Spanish and English keys
-    const cuit = datos.cuit;
-    const concepto = datos.concepto || datos.concept;
-    const importe = datos.importe || datos.amount;
+    // Validate required fields
+    if (!cuit || cuit.length < 11) {
+      logger.warn(`Invalid CUIT from GROQ: ${cuit}`);
+      return { success: false, error: 'CUIT must be 11 digits' };
+    }
+
+    if (!concepto || concepto.length === 0) {
+      logger.warn('Empty concept from GROQ');
+      return { success: false, error: 'Concept is required' };
+    }
+
+    if (isNaN(importe) || importe <= 0) {
+      logger.warn(`Invalid importe from GROQ: ${importe}`);
+      return { success: false, error: 'Amount must be a positive number' };
+    }
+
+    const datos = { cuit, concepto, importe };
 
     if (!cuit || !concepto || !importe) {
       logger.warn('❌ Groq: datos incompletos');
