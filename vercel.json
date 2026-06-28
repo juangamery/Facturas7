@@ -1,3 +1,18 @@
 {
-  "buildCommand": "cd frontend && npm install && npm run build && cd .."
+  "buildCommand": "cd frontend && npm install && npm run build && cd ..",
+  "functions": {
+    "api/**/*.js": {
+      "runtime": "nodejs22.x"
+    }
+  },
+  "routes": [
+    {
+      "src": "/static/(.*)",
+      "dest": "/frontend/dist/static/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/api/handler.js"
+    }
+  ]
 }
