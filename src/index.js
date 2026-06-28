@@ -178,30 +178,42 @@ async function avisarClientesVencidos() {
   const proximaMedianoche = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate() + 1, 10, 0, 0);
   let tiempoEspera = proximaMedianoche - ahora;
 
-  setTimeout(() => {
+  setTimeout(async () => {
     try {
-      // Buscar usuarios que vencen en 3 días
+      logger.info('🔔 Revisando clientes próximos a vencer...');
+
+      // Buscar usuarios que vencen en 3 días - usar DB local
       const db = getDB();
-      const en3Dias = new Date();
-      en3Dias.setDate(en3Dias.getDate() + 3);
-      const timestamp3Dias = Math.floor(en3Dias.getTime() / 1000);
+      const en3Dias = Math.floor((Date.now() + 3 * 24 * 60 * 60 * 1000) / 1000);
+      const ahora_ts = Math.floor(Date.now() / 1000);
 
-      const vencidos = db.prepare(`
-        SELECT * FROM usuarios
-        WHERE activo = 1
-        AND fecha_vencimiento < ?
-        AND fecha_vencimiento > ?
-        AND numero_telefono IS NOT NULL
-      `).all(timestamp3Dias, Math.floor(new Date().getTime() / 1000));
+      const usuarios = await db.from('usuarios')
+        .select('*')
+        .eq('activo', true)
+        .not('numero_telefono', 'is', null)
+        .lt('fecha_vencimiento', en3Dias)
+        .gt('fecha_vencimiento', ahora_ts);
 
-      vencidos.forEach(usuario => {
-        // TODO: Enviar mensaje de WhatsApp avisando que vence pronto
-        logger.info(`Aviso: ${usuario.nombre} vence en 3 días`);
-      });
+      if (usuarios.data && usuarios.data.length > 0) {
+        logger.info(`📌 ${usuarios.data.length} clientes vencen en 3 días`);
+
+        for (const usuario of usuarios.data) {
+          try {
+            const fechaVenc = new Date(usuario.fecha_vencimiento * 1000);
+            const mensaje = `🔔 Recordatorio: Tu suscripción vence el ${fechaVenc.toLocaleDateString('es-AR')}. Contáctanos para renovar.`;
+
+            // Aquí iría envío por WhatsApp si Evolution/WABA estuviera configurado
+            logger.info(`✉️  Aviso para ${usuario.nombre}: ${mensaje}`);
+          } catch (err) {
+            logger.warn(`Error notificando ${usuario.nombre}: ${err.message}`);
+          }
+        }
+      }
 
       avisarClientesVencidos();
     } catch (error) {
       logger.error(`Error en aviso de vencimiento: ${error.message}`);
+      avisarClientesVencidos();
     }
   }, tiempoEspera);
 }
