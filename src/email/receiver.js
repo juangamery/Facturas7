@@ -5,6 +5,7 @@ import { logger } from '../logger.js';
 import { getDB } from '../db.js';
 import { enviarFacturaEmail, enviarRespuestaEmail, enviarPedidoRegistro } from './mailer.js';
 import { solicitarCAE } from '../facturacion/factura.js';
+import { generarPDFFactura } from '../facturacion/pdf.js';
 
 let groq = null;
 let imap = null;
@@ -292,43 +293,34 @@ async function crearFacturaConDatos(cuit, concepto, importe, emailFrom) {
 
     // Generar PDF y enviar respuesta
     try {
-      const pdfBuffer = generarPDFFactura(numero, usuario.razon_social, usuario.cuit, concepto, importe);
-      await enviarRespuestaEmail(emailFrom, numero, concepto, importe, pdfBuffer);
+      const pdfPath = await generarPDFFactura({
+        numero_factura: numero,
+        tipo_comprobante: 'Factura C',
+        fecha_emision: new Date().toISOString().split('T')[0],
+        razon_social_emisor: usuario.razon_social,
+        cuit_emisor: usuario.cuit,
+        domicilio_emisor: usuario.domicilio || '',
+        razon_social_cliente: datoExtraidos.razon_social || 'Cliente',
+        documento_cliente: datoExtraidos.documento || 'CF',
+        concepto,
+        importe: parseFloat(importe),
+        cae: 'PENDIENTE',
+        punto_venta: usuario.punto_venta || 1
+      });
+
+      await enviarRespuestaEmail(emailFrom, numero, concepto, importe, pdfPath);
       logger.info(`📧 Email con PDF enviado a ${emailFrom}`);
     } catch (emailErr) {
-      logger.error(`❌ Error enviando email: ${emailErr.message}`);
+      logger.warn(`⚠️ No se envió PDF por email: ${emailErr.message}`);
     }
 
     logger.info(`✅ Factura creada: #${numero} para ${usuario.razon_social}`);
     return { success: true, factura: numero, email: emailFrom };
 
   } catch (error) {
-    logger.error(`Crear factura: ${error.message}`);
+    logger.error(`Crear factura desde email: ${error.message}`);
     return { success: false, error: error.message };
   }
-}
-
-function generarPDFFactura(numero, razonSocial, cuit, concepto, importe) {
-  // PDF simple en texto (sin librería)
-  const contenido = `
-FACTURA
-
-Número: ${numero}
-Fecha: ${new Date().toISOString().split('T')[0]}
-
-EMPRESA:
-${razonSocial}
-CUIT: ${cuit}
-
-CONCEPTO:
-${concepto}
-
-IMPORTE: $${importe}
-
-Estado: PENDIENTE
-  `;
-
-  return Buffer.from(contenido, 'utf8');
 }
 
 export async function procesarEmailManual(cuit, emailOrigen) {
