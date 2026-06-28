@@ -352,11 +352,13 @@ router.use(requireAuth);
 router.get('/dashboard', (req, res) => {
   try {
     const db = getLocalDB();
+    logger.debug('Dashboard: getLocalDB() OK');
 
     // Estadísticas generales
     const usuariosActivos = db.prepare(
       'SELECT COUNT(*) as count FROM usuarios WHERE activo = 1'
     ).get();
+    logger.debug(`Dashboard: usuariosActivos = ${JSON.stringify(usuariosActivos)}`);
 
     const usuariosVencidos = db.prepare(
       `SELECT COUNT(*) as count FROM usuarios
@@ -380,6 +382,7 @@ router.get('/dashboard', (req, res) => {
        JOIN usuarios u ON f.usuario_id = u.id
        ORDER BY f.creado_en DESC LIMIT 10`
     ).all();
+    logger.debug(`Dashboard: ultimasFacturas count = ${ultimasFacturas.length}`);
 
     // Usuarios próximos a vencer (7 días)
     const proximosAVencer = db.prepare(
@@ -389,20 +392,23 @@ router.get('/dashboard', (req, res) => {
        AND fecha_vencimiento < strftime('%s', 'now', '+7 days')
        ORDER BY fecha_vencimiento ASC`
     ).all();
+    logger.debug(`Dashboard: proximosAVencer count = ${proximosAVencer.length}`);
 
+    logger.info('Dashboard: rendering with data');
     res.render('dashboard', {
       title: 'Dashboard',
-      usuariosActivos: usuariosActivos.count,
-      usuariosVencidos: usuariosVencidos.count,
-      facturasHoy: facturasHoy.count,
-      facturasDelMes: facturasDelMes.count,
+      usuariosActivos: usuariosActivos?.count || 0,
+      usuariosVencidos: usuariosVencidos?.count || 0,
+      facturasHoy: facturasHoy?.count || 0,
+      facturasDelMes: facturasDelMes?.count || 0,
       ultimasFacturas,
       proximosAVencer
     });
 
   } catch (error) {
     logearError(error, 'Dashboard');
-    res.render('dashboard', { title: 'Dashboard', error: 'Error cargando datos' });
+    logger.error(`Dashboard error stack: ${error.stack}`);
+    res.status(500).json({ error: error.message, stack: error.stack });
   }
 });
 
