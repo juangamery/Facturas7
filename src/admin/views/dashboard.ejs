@@ -1,8 +1,50 @@
-<div class="container">
-  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
-    <h1>📊 Dashboard</h1>
-    <a href="/admin/clientes/nuevo" class="btn btn-primary">+ Nuevo Cliente</a>
-  </div>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard - Facturación</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .stats-grid { @apply grid grid-cols-4 gap-4 mb-8; }
+    .stat-card { @apply bg-slate-800 p-6 rounded-lg border border-slate-700; }
+    .stat-number { @apply text-3xl font-bold text-blue-400; }
+    .stat-label { @apply text-sm text-slate-400 mt-2; }
+    .card { @apply bg-slate-800 rounded-lg border border-slate-700 mb-6; }
+    .card-header { @apply px-6 py-4 font-bold text-lg border-b border-slate-700; }
+    .card-body { @apply p-6; }
+    .btn { @apply px-4 py-2 rounded-lg font-medium transition; }
+    .btn-primary { @apply bg-blue-600 text-white hover:bg-blue-700; }
+    .btn-secondary { @apply bg-slate-700 text-white hover:bg-slate-600; }
+    .empty-state { @apply text-center py-8; }
+    .empty-state-icon { @apply text-4xl mb-4; }
+    .table { @apply w-full; }
+    .table thead { @apply border-b border-slate-700; }
+    .table th { @apply text-left px-4 py-2 text-slate-300 font-semibold; }
+    .table td { @apply px-4 py-3 border-b border-slate-700/50; }
+    code { @apply bg-slate-900 px-2 py-1 rounded text-sm text-slate-300; }
+  </style>
+</head>
+<body class="bg-slate-950 text-white">
+  <!-- NAVBAR -->
+  <nav class="sticky top-0 z-50 border-b border-slate-800 bg-slate-900/95 backdrop-blur">
+    <div class="flex items-center justify-between px-6 py-4 max-w-7xl mx-auto w-full">
+      <a class="text-xl font-bold text-blue-500" href="/admin/dashboard">📱 Facturación</a>
+      <div class="flex gap-1">
+        <a class="px-4 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800 transition" href="/admin/dashboard">📊 Dashboard</a>
+        <a class="px-4 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800 transition" href="/admin/clientes">👥 Clientes</a>
+        <a class="px-4 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800 transition" href="/admin/facturas">📄 Facturas</a>
+        <a class="px-4 py-2 rounded-lg text-sm font-medium text-red-400 hover:text-red-300 hover:bg-slate-800 transition" href="/admin/logout">🚪 Salir</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- MAIN CONTENT -->
+  <main class="p-8 max-w-7xl mx-auto">
+    <div class="flex justify-between items-center mb-8">
+      <h1 class="text-4xl font-bold">📊 Dashboard</h1>
+      <a href="/admin/clientes/nuevo" class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium">+ Nuevo Cliente</a>
+    </div>
 
   <!-- STATS GRID -->
   <div class="stats-grid">
@@ -90,4 +132,12 @@
       <% } %>
     </div>
   </div>
-</div>
+
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="text-center py-4 text-slate-500 text-sm border-t border-slate-800">
+    <p>&copy; 2024 Bot de Facturación. Todos los derechos reservados.</p>
+  </footer>
+</body>
+</html>
