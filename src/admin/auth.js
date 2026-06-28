@@ -1,17 +1,12 @@
-// ==========================================
-// AUTENTICACIÓN DEL PANEL ADMIN
-// ==========================================
-// Login, logout y middleware para proteger rutas
-
 import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
 import { logger } from '../logger.js';
 
-// Hash de contraseña admin (leer de env vars)
 const ADMIN_USER = process.env.ADMIN_USER || 'admin';
 const ADMIN_PASSWORD_PLAIN = process.env.ADMIN_PASSWORD || 'admin123';
+const JWT_SECRET = process.env.SESSION_SECRET || 'default_jwt_secret_change_in_prod';
 let ADMIN_PASSWORD_HASH = null;
 
-// Generar hash la primera vez
 async function getAdminHash() {
   if (!ADMIN_PASSWORD_HASH) {
     ADMIN_PASSWORD_HASH = await bcrypt.hash(ADMIN_PASSWORD_PLAIN, 10);
@@ -19,25 +14,37 @@ async function getAdminHash() {
   return ADMIN_PASSWORD_HASH;
 }
 
-// Middleware para verificar sesión
 export function requireAuth(req, res, next) {
-  if (req.session?.user?.logueado === true) {
+  const token = req.cookies?.auth_token;
+
+  if (!token) {
+    return res.redirect('/admin/login');
+  }
+
+  try {
+    jwt.verify(token, JWT_SECRET);
     next();
-  } else {
+  } catch (err) {
+    logger.warn(`Token inválido: ${err.message}`);
     res.redirect('/admin/login');
   }
 }
 
-// GET /admin/login - Mostrar formulario
 export async function getLogin(req, res) {
-  if (req.session?.user?.logueado) {
-    return res.redirect('/admin/dashboard');
+  const token = req.cookies?.auth_token;
+
+  if (token) {
+    try {
+      jwt.verify(token, JWT_SECRET);
+      return res.redirect('/admin/dashboard');
+    } catch (err) {
+      // Token inválido, mostrar login
+    }
   }
 
   res.render('login', { title: 'Login' });
 }
 
-// POST /admin/login - Procesar login
 export async function postLogin(req, res) {
   const { usuario, password } = req.body;
 
@@ -48,7 +55,6 @@ export async function postLogin(req, res) {
     });
   }
 
-  // Verificar credenciales
   const adminHash = await getAdminHash();
   const usuarioCorrecto = usuario === ADMIN_USER;
   const passwordCorrecto = await bcrypt.compare(password, adminHash);
@@ -61,21 +67,25 @@ export async function postLogin(req, res) {
     });
   }
 
-  // Crear sesión
-  req.session.user = {
-    logueado: true,
-    usuario: ADMIN_USER,
-    loginTime: new Date()
-  };
+  const token = jwt.sign(
+    { usuario: ADMIN_USER, iat: Date.now() },
+    JWT_SECRET,
+    { expiresIn: '7d' }
+  );
+
+  res.cookie('auth_token', token, {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'lax',
+    maxAge: 7 * 24 * 60 * 60 * 1000
+  });
 
   logger.info(`✅ Login exitoso: ${usuario}`);
   res.redirect('/admin/dashboard');
 }
 
-// GET /admin/logout - Cerrar sesión
 export function logout(req, res) {
-  req.session.destroy((err) => {
-    if (err) logger.error(`Error al logout: ${err.message}`);
-    res.redirect('/admin/login');
-  });
+  res.clearCookie('auth_token');
+  logger.info('Logout exitoso');
+  res.redirect('/admin/login');
 }
