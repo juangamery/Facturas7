@@ -50,7 +50,7 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
 });
 
-// Inicialización async
+// Inicialización async (no-blocking)
 let dbReady = false;
 
 async function initApp() {
@@ -58,26 +58,26 @@ async function initApp() {
     await inicializarDB();
     logger.info('✅ BD conectada');
     dbReady = true;
-
-    try {
-      await inicializarMailer();
-      logger.info('✅ Mailer init');
-    } catch (e) {
-      logger.warn(`⚠️ Mailer no disponible: ${e.message}`);
-    }
-
-    try {
-      await inicializarReceiver();
-      logger.info('✅ Receiver init');
-    } catch (e) {
-      logger.warn(`⚠️ Receiver no disponible: ${e.message}`);
-    }
   } catch (error) {
-    logger.error(`Init error: ${error.message}`);
+    logger.warn(`⚠️ BD error (continuando): ${error.message}`);
+  }
+
+  try {
+    await inicializarMailer();
+    logger.info('✅ Mailer init');
+  } catch (e) {
+    logger.warn(`⚠️ Mailer no disponible: ${e.message}`);
+  }
+
+  try {
+    await inicializarReceiver();
+    logger.info('✅ Receiver init');
+  } catch (e) {
+    logger.warn(`⚠️ Receiver no disponible: ${e.message}`);
   }
 }
 
-// Iniciar app
-initApp();
+// Iniciar app (no-blocking - no await)
+initApp().catch(e => logger.error(`Fatal init: ${e.message}`));
 
 export default app;
