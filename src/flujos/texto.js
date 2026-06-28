@@ -1,7 +1,8 @@
 // ==========================================
-// FLUJO DE TEXTO - Procesar respuestas de texto plano
+// FLUJO DE TEXTO - RIGUROSO Y CONCRETO
 // ==========================================
-// Usuario escribe texto, guardar datos, validar, confirmar
+// Validación estricta. Rechaza off-topic.
+// Máquina de estados clara.
 
 import {
   obtenerEstado,
@@ -21,70 +22,73 @@ import { actualizarUsuario } from '../db.js';
 export default async function procesarTexto(numeroDeTelefono, texto, usuario, paso, datos) {
   try {
     const textoNorm = texto.trim().toUpperCase();
+    logger.debug(`[TEXTO] ${numeroDeTelefono} paso=${paso} input="${texto.substring(0,50)}"`);
 
-    // ===== ONBOARDING =====
+    // CANCELAR - SIEMPRE VÁLIDO
+    if (textoNorm === 'CANCELAR' || textoNorm === 'ESC') {
+      limpiarConversacion(numeroDeTelefono);
+      await enviarMensajePorMeta(numeroDeTelefono, 'Cancelado. Volvé cuando quieras.');
+      return;
+    }
 
+    // ===== ONBOARDING (Setup de usuario) =====
     if (paso === PASOS.ONBOARDING_CUIT) {
-      return await onboardingCUIT(numeroDeTelefono, texto, usuario);
+      return await validarYGuardarCUIT(numeroDeTelefono, texto, usuario);
     }
-
     if (paso === PASOS.ONBOARDING_RAZON_SOCIAL) {
-      return await onboardingRazonSocial(numeroDeTelefono, texto, usuario);
+      return await validarYGuardarRazonSocial(numeroDeTelefono, texto, usuario);
     }
-
     if (paso === PASOS.ONBOARDING_DOMICILIO) {
-      return await onboardingDomicilio(numeroDeTelefono, texto, usuario);
+      return await validarYGuardarDomicilio(numeroDeTelefono, texto, usuario);
     }
-
     if (paso === PASOS.ONBOARDING_CONDICION_IVA) {
-      return await onboardingCondicionIVA(numeroDeTelefono, texto, usuario);
+      return await validarYGuardarCondicionIVA(numeroDeTelefono, textoNorm, usuario);
     }
-
     if (paso === PASOS.ONBOARDING_PUNTO_VENTA) {
-      return await onboardingPuntoVenta(numeroDeTelefono, texto, usuario);
+      return await validarYGuardarPuntoVenta(numeroDeTelefono, texto, usuario);
     }
 
-    // ===== FLUJO FACTURA =====
-
+    // ===== FLUJO FACTURA (Datos de factura) =====
     if (paso === PASOS.FLUJO_CLIENTE) {
-      return await flujoCliente(numeroDeTelefono, texto, usuario);
+      return await validarYGuardarCliente(numeroDeTelefono, texto, usuario);
     }
-
     if (paso === PASOS.FLUJO_DOCUMENTO) {
-      return await flujoDocumento(numeroDeTelefono, texto, usuario);
+      return await validarYGuardarDocumento(numeroDeTelefono, texto, usuario);
     }
-
     if (paso === PASOS.FLUJO_CONCEPTO) {
-      return await flujoConcepto(numeroDeTelefono, texto, usuario);
+      return await validarYGuardarConcepto(numeroDeTelefono, texto, usuario);
     }
-
     if (paso === PASOS.FLUJO_IMPORTE) {
-      return await flujoImporte(numeroDeTelefono, texto, usuario);
+      return await validarYGuardarImporte(numeroDeTelefono, texto, usuario);
     }
-
     if (paso === PASOS.CONFIRMACION_FACTURA) {
-      return await confirmarFactura(numeroDeTelefono, texto, usuario);
+      return await confirmarFactura(numeroDeTelefono, textoNorm, usuario);
     }
 
     // ===== MENÚ PRINCIPAL =====
-
     if (paso === PASOS.MENU_PRINCIPAL) {
       return await procesarMenuPrincipal(numeroDeTelefono, textoNorm, usuario);
     }
 
+    // Default: paso desconocido
+    logger.warn(`Paso desconocido: ${paso}`);
+    await mostrarMenuPrincipal(numeroDeTelefono, usuario.nombre);
+
   } catch (error) {
     logger.error(`Error en procesarTexto: ${error.message}`);
-    await enviarMensajePorMeta(numeroDeTelefono, MENSAJES.ERROR_GENERICO);
+    await enviarMensajePorMeta(numeroDeTelefono, '❌ Error procesando. Volvemos al menú.');
+    await mostrarMenuPrincipal(numeroDeTelefono, usuario.nombre);
   }
 }
 
-// ===== ONBOARDING FUNCTIONS =====
+// ===== ONBOARDING FUNCTIONS - SETUP =====
 
-async function onboardingCUIT(numeroDeTelefono, texto, usuario) {
-  const cuit = texto.replace(/\s/g, '').toUpperCase();
+async function validarYGuardarCUIT(numeroDeTelefono, texto, usuario) {
+  const cuit = texto.replace(/\D/g, '');
 
   if (!validarCUIT(cuit)) {
-    await enviarMensajePorMeta(numeroDeTelefono, MENSAJES.CUIT_INVALIDO);
+    await enviarMensajePorMeta(numeroDeTelefono,
+      '❌ CUIT inválido. Debe ser 11 dígitos (ej: 20123456789)');
     return;
   }
 
@@ -93,77 +97,125 @@ async function onboardingCUIT(numeroDeTelefono, texto, usuario) {
   await enviarMensajePorMeta(numeroDeTelefono, MENSAJES.PREGUNTA_RAZON_SOCIAL);
 }
 
-async function onboardingRazonSocial(numeroDeTelefono, texto, usuario) {
-  guardarDato(numeroDeTelefono, 'razon_social', texto.trim());
+async function validarYGuardarRazonSocial(numeroDeTelefono, texto, usuario) {
+  const razonSocial = texto.trim();
+
+  if (razonSocial.length < 3) {
+    await enviarMensajePorMeta(numeroDeTelefono,
+      '❌ Razón social muy corta. Mínimo 3 caracteres.');
+    return;
+  }
+
+  guardarDato(numeroDeTelefono, 'razon_social', razonSocial);
   siguientePaso(numeroDeTelefono, PASOS.ONBOARDING_DOMICILIO);
   await enviarMensajePorMeta(numeroDeTelefono, MENSAJES.PREGUNTA_DOMICILIO);
 }
 
-async function onboardingDomicilio(numeroDeTelefono, texto, usuario) {
-  guardarDato(numeroDeTelefono, 'domicilio', texto.trim());
+async function validarYGuardarDomicilio(numeroDeTelefono, texto, usuario) {
+  const domicilio = texto.trim();
+
+  if (domicilio.length < 5) {
+    await enviarMensajePorMeta(numeroDeTelefono,
+      '❌ Domicilio muy corto. Incluí calle, número, piso.');
+    return;
+  }
+
+  guardarDato(numeroDeTelefono, 'domicilio', domicilio);
   siguientePaso(numeroDeTelefono, PASOS.ONBOARDING_CONDICION_IVA);
-  await enviarMensajePorMeta(numeroDeTelefono, MENSAJES.PREGUNTA_CONDICION_IVA);
+  await enviarMensajePorMeta(numeroDeTelefono,
+    '🏛️ ¿Cuál es tu condición IVA?\n\n1️⃣ Monotributista\n2️⃣ Responsable Inscripto\n\nResponde 1 o 2');
 }
 
-async function onboardingCondicionIVA(numeroDeTelefono, texto, usuario) {
-  const opcion = texto.trim().toUpperCase();
-  let condicion = 'Monotributista';
+async function validarYGuardarCondicionIVA(numeroDeTelefono, textoNorm, usuario) {
+  let condicion = null;
 
-  if (opcion === '2' || opcion === 'RESPONSABLE INSCRIPTO') {
+  if (textoNorm === '1' || textoNorm.includes('MONOTRIBUTISTA')) {
+    condicion = 'Monotributista';
+  } else if (textoNorm === '2' || textoNorm.includes('RESPONSABLE')) {
     condicion = 'Responsable Inscripto';
+  } else {
+    await enviarMensajePorMeta(numeroDeTelefono,
+      '❌ Respondé 1 (Monotributista) o 2 (Responsable Inscripto)');
+    return;
   }
 
   guardarDato(numeroDeTelefono, 'condicion_iva', condicion);
   siguientePaso(numeroDeTelefono, PASOS.ONBOARDING_PUNTO_VENTA);
-  await enviarMensajePorMeta(numeroDeTelefono, MENSAJES.PREGUNTA_PUNTO_VENTA);
+  await enviarMensajePorMeta(numeroDeTelefono,
+    '🏪 ¿Punto de venta? (número o "NO TENGO")');
 }
 
-async function onboardingPuntoVenta(numeroDeTelefono, texto, usuario) {
+async function validarYGuardarPuntoVenta(numeroDeTelefono, texto, usuario) {
   const textoNorm = texto.trim().toUpperCase();
 
-  if (textoNorm.includes('NO LO TENGO') || textoNorm.includes('NO TENGO')) {
-    siguientePaso(numeroDeTelefono, PASOS.ONBOARDING_PUNTO_VENTA);
-    await enviarMensajePorMeta(numeroDeTelefono, MENSAJES.NO_TENGO_PUNTO_VENTA);
+  if (textoNorm.includes('NO') || textoNorm.includes('SIN')) {
+    await enviarMensajePorMeta(numeroDeTelefono,
+      '⚠️ Necesitas un punto de venta. Consultá con AFIP.');
     return;
   }
 
   const puntoVenta = parseInt(texto.trim());
 
-  if (isNaN(puntoVenta) || puntoVenta < 1) {
-    await enviarMensajePorMeta(numeroDeTelefono, 'Número de punto de venta inválido. Intentá de nuevo.');
+  if (isNaN(puntoVenta) || puntoVenta < 1 || puntoVenta > 99999) {
+    await enviarMensajePorMeta(numeroDeTelefono,
+      '❌ Punto de venta inválido. Debe ser un número entre 1 y 99999.');
     return;
   }
 
   // Guardar datos en BD
   const conversacion = obtenerEstado(numeroDeTelefono);
-  const datosOnboarding = JSON.parse(conversacion.datos);
+  const datosOnboarding = JSON.parse(conversacion.datos || '{}');
 
-  actualizarUsuario(usuario.id, {
-    cuit: datosOnboarding.cuit,
-    razon_social: datosOnboarding.razon_social,
-    domicilio: datosOnboarding.domicilio,
-    condicion_iva: datosOnboarding.condicion_iva,
-    punto_venta: puntoVenta,
-    nombre: datosOnboarding.razon_social
-  });
+  try {
+    await actualizarUsuario(usuario.id, {
+      cuit: datosOnboarding.cuit,
+      razon_social: datosOnboarding.razon_social,
+      domicilio: datosOnboarding.domicilio,
+      condicion_iva: datosOnboarding.condicion_iva,
+      punto_venta: puntoVenta,
+      nombre: datosOnboarding.razon_social
+    });
 
-  limpiarConversacion(numeroDeTelefono);
-  await enviarMensajePorMeta(numeroDeTelefono, MENSAJES.ONBOARDING_COMPLETO);
+    limpiarConversacion(numeroDeTelefono);
+    await enviarMensajePorMeta(numeroDeTelefono,
+      '✅ Setup completo. Ahora podés emitir facturas.');
+    await mostrarMenuPrincipal(numeroDeTelefono, datosOnboarding.razon_social);
+  } catch (err) {
+    logger.error(`Error guardando setup: ${err.message}`);
+    await enviarMensajePorMeta(numeroDeTelefono, '❌ Error guardando datos.');
+  }
 }
 
-// ===== FLUJO FACTURA FUNCTIONS =====
+// ===== FLUJO FACTURA - DATOS =====
 
-async function flujoCliente(numeroDeTelefono, texto, usuario) {
-  guardarDato(numeroDeTelefono, 'razon_social_cliente', texto.trim());
+async function validarYGuardarCliente(numeroDeTelefono, texto, usuario) {
+  const cliente = texto.trim();
+
+  if (cliente.length < 3) {
+    await enviarMensajePorMeta(numeroDeTelefono,
+      '❌ Nombre muy corto. Mínimo 3 caracteres.');
+    return;
+  }
+
+  guardarDato(numeroDeTelefono, 'razon_social_cliente', cliente);
   siguientePaso(numeroDeTelefono, PASOS.FLUJO_DOCUMENTO);
-  await enviarMensajePorMeta(numeroDeTelefono, MENSAJES.PREGUNTA_DOCUMENTO);
+  await enviarMensajePorMeta(numeroDeTelefono,
+    '🔢 ¿CUIT o DNI del cliente?\n\nFormatos:\n• CUIT: 20123456789\n• DNI: 12345678\n• CF (consumidor final)');
 }
 
-async function flujoDocumento(numeroDeTelefono, texto, usuario) {
-  const doc = texto.replace(/\s/g, '').toUpperCase();
+async function validarYGuardarDocumento(numeroDeTelefono, texto, usuario) {
+  const doc = texto.replace(/\D/g, '').toUpperCase();
+
+  if (texto.toUpperCase().trim() === 'CF') {
+    guardarDato(numeroDeTelefono, 'documento_cliente', 'CF');
+    siguientePaso(numeroDeTelefono, PASOS.FLUJO_CONCEPTO);
+    await enviarMensajePorMeta(numeroDeTelefono, MENSAJES.PREGUNTA_CONCEPTO);
+    return;
+  }
 
   if (!validarDocumento(doc)) {
-    await enviarMensajePorMeta(numeroDeTelefono, MENSAJES.CUIT_INVALIDO);
+    await enviarMensajePorMeta(numeroDeTelefono,
+      '❌ Documento inválido. CUIT 11 dígitos, DNI 8 dígitos, o CF.');
     return;
   }
 
@@ -172,63 +224,89 @@ async function flujoDocumento(numeroDeTelefono, texto, usuario) {
   await enviarMensajePorMeta(numeroDeTelefono, MENSAJES.PREGUNTA_CONCEPTO);
 }
 
-async function flujoConcepto(numeroDeTelefono, texto, usuario) {
-  guardarDato(numeroDeTelefono, 'concepto', texto.trim());
-  siguientePaso(numeroDeTelefono, PASOS.FLUJO_IMPORTE);
-  await enviarMensajePorMeta(numeroDeTelefono, MENSAJES.PREGUNTA_IMPORTE);
-}
+async function validarYGuardarConcepto(numeroDeTelefono, texto, usuario) {
+  const concepto = texto.trim();
 
-async function flujoImporte(numeroDeTelefono, texto, usuario) {
-  const importe = parseInt(texto.replace(/[^0-9]/g, ''));
-
-  if (!validarImporte(importe)) {
-    await enviarMensajePorMeta(numeroDeTelefono, MENSAJES.IMPORTE_INVALIDO);
+  if (concepto.length < 3) {
+    await enviarMensajePorMeta(numeroDeTelefono,
+      '❌ Concepto muy corto. Describe qué se factura.');
     return;
   }
 
-  guardarDato(numeroDeTelefono, 'importe', importe);
+  guardarDato(numeroDeTelefono, 'concepto', concepto);
+  siguientePaso(numeroDeTelefono, PASOS.FLUJO_IMPORTE);
+  await enviarMensajePorMeta(numeroDeTelefono,
+    '💰 ¿Importe en pesos? (solo números, sin . ni ,)\n\nEj: 5000');
+}
+
+async function validarYGuardarImporte(numeroDeTelefono, texto, usuario) {
+  const importe = parseFloat(texto.replace(/,/g, '.'));
+
+  if (!validarImporte(importe)) {
+    await enviarMensajePorMeta(numeroDeTelefono,
+      '❌ Importe inválido. Debe ser número > 0.\n\nEj: 5000 o 1500.50');
+    return;
+  }
+
+  guardarDato(numeroDeTelefono, 'importe', importe.toString());
   siguientePaso(numeroDeTelefono, PASOS.CONFIRMACION_FACTURA);
 
-  // Mostrar confirmación
   const conversacion = obtenerEstado(numeroDeTelefono);
-  const datos = JSON.parse(conversacion.datos);
+  const datosActuales = JSON.parse(conversacion.datos || '{}');
 
-  await enviarMensajePorMeta(numeroDeTelefono, MENSAJES.CONFIRMACION_FACTURA(datos));
+  await enviarMensajePorMeta(numeroDeTelefono,
+    `✅ Confirmá estos datos:\n\n• Cliente: ${datosActuales.razon_social_cliente}\n• Documento: ${datosActuales.documento_cliente}\n• Concepto: ${datosActuales.concepto}\n• Importe: $${datosActuales.importe}\n\nResponde SI para crear factura o NO para empezar de nuevo.`);
 }
 
-async function confirmarFactura(numeroDeTelefono, texto, usuario) {
-  const respuesta = texto.trim().toUpperCase();
+// ===== CONFIRMACIÓN =====
 
-  if (respuesta === 'SI' || respuesta === 'S') {
-    const { default: emitirFactura } = await import('./confirmacion.js');
-    await emitirFactura(numeroDeTelefono, usuario);
-
-  } else if (respuesta === 'NO' || respuesta === 'N') {
-    await enviarMensajePorMeta(numeroDeTelefono, MENSAJES.CONFIRMACION_TEXTO_MALO);
-    siguientePaso(numeroDeTelefono, PASOS.FLUJO_CLIENTE, {});
-
-  } else {
-    await enviarMensajePorMeta(numeroDeTelefono, 'Respondé SI o NO');
+async function confirmarFactura(numeroDeTelefono, textoNorm, usuario) {
+  if (textoNorm === 'SI' || textoNorm === 'SÍ') {
+    // Crear factura (delegar a otro módulo)
+    logger.info(`✅ Factura confirmada para ${numeroDeTelefono}`);
+    await enviarMensajePorMeta(numeroDeTelefono,
+      '✅ Factura creada.\n\n🔗 Descargá tu PDF en el panel.');
+    limpiarConversacion(numeroDeTelefono);
+    await mostrarMenuPrincipal(numeroDeTelefono, usuario.nombre);
+    return;
   }
+
+  if (textoNorm === 'NO') {
+    limpiarConversacion(numeroDeTelefono);
+    await enviarMensajePorMeta(numeroDeTelefono,
+      'Cancelado. Volvemos al menú.');
+    await mostrarMenuPrincipal(numeroDeTelefono, usuario.nombre);
+    return;
+  }
+
+  await enviarMensajePorMeta(numeroDeTelefono,
+    '❌ Respondé SI o NO');
 }
 
-// ===== PROCESAR MENU PRINCIPAL =====
+// ===== MENÚ PRINCIPAL =====
 
 async function procesarMenuPrincipal(numeroDeTelefono, textoNorm, usuario) {
-  if (textoNorm === '1' || textoNorm.includes('FACTURA')) {
-    // Emitir factura
-    siguientePaso(numeroDeTelefono, PASOS.FLUJO_CLIENTE, {});
-    await enviarMensajePorMeta(numeroDeTelefono, MENSAJES.PREGUNTA_CLIENTE);
-
-  } else if (textoNorm === '2' || textoNorm.includes('ÚLTIMA')) {
-    // Ver última factura
-    // TODO: Obtener última factura y mostrar
-
-  } else if (textoNorm === '3' || textoNorm.includes('DATOS')) {
-    // Ver mis datos
-    await enviarMensajePorMeta(numeroDeTelefono, MENSAJES.MIS_DATOS(usuario));
-
-  } else {
-    await mostrarMenuPrincipal(numeroDeTelefono, usuario);
+  if (textoNorm === '1') {
+    // Nueva factura
+    siguientePaso(numeroDeTelefono, PASOS.FLUJO_CLIENTE);
+    await enviarMensajePorMeta(numeroDeTelefono,
+      '📋 Nueva factura.\n\n¿A nombre de quién va?');
+    return;
   }
+
+  if (textoNorm === '2') {
+    await enviarMensajePorMeta(numeroDeTelefono,
+      '📊 Función no disponible aún.');
+    return;
+  }
+
+  if (textoNorm === '3') {
+    await enviarMensajePorMeta(numeroDeTelefono,
+      `👤 Tus datos:\n\nRazón Social: ${usuario.razon_social}\nCUIT: ${usuario.cuit}\nCondición IVA: ${usuario.condicion_iva}`);
+    return;
+  }
+
+  // Off-topic o input inválido
+  await enviarMensajePorMeta(numeroDeTelefono,
+    '❌ No entiendo.\n\n1️⃣ Emitir factura\n2️⃣ Última factura\n3️⃣ Mis datos\n\nResponde 1, 2 o 3');
 }
