@@ -13,6 +13,7 @@ dotenv.config();
 
 import express from 'express';
 import session from 'express-session';
+import SQLiteStore from 'connect-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -50,15 +51,23 @@ app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'admin/views'));
 app.set('view cache', false); // Deshabilitar caché para desarrollo
 
-// Sesiones para el panel admin
+// Sesiones para el panel admin con SQLite store persistente
+const store = new (SQLiteStore(session))({
+  db: 'sessions.db',
+  dir: path.join(__dirname, '../'),
+  table: 'sessions'
+});
+
 app.use(session({
+  store: store,
   secret: process.env.SESSION_SECRET || 'default_secret_change_in_prod',
   resave: false,
   saveUninitialized: false,
   cookie: {
     secure: true,
     httpOnly: true,
-    sameSite: 'lax'
+    sameSite: 'lax',
+    maxAge: 7 * 24 * 60 * 60 * 1000 // 7 días
   }
 }));
 
