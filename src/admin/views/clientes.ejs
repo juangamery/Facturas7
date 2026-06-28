@@ -1,84 +1,118 @@
-<h1>👥 Clientes</h1>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clientes - Facturación</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 text-white">
+  <!-- NAVBAR -->
+  <nav class="sticky top-0 z-50 border-b border-slate-800 bg-slate-900/95 backdrop-blur">
+    <div class="flex items-center justify-between px-6 py-4 max-w-7xl mx-auto w-full">
+      <a class="text-xl font-bold text-blue-400" href="/admin/dashboard">📱 Facturación</a>
+      <div class="flex gap-2">
+        <a class="px-4 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800 transition" href="/admin/dashboard">📊 Dashboard</a>
+        <a class="px-4 py-2 rounded-lg text-sm font-medium text-white bg-slate-800 rounded-lg" href="/admin/clientes">👥 Clientes</a>
+        <a class="px-4 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800 transition" href="/admin/facturas">📄 Facturas</a>
+        <a class="px-4 py-2 rounded-lg text-sm font-medium text-red-400 hover:text-red-300 hover:bg-slate-800 transition" href="/admin/logout">🚪 Salir</a>
+      </div>
+    </div>
+  </nav>
 
-<div class="filtros">
-  <% const filtroActual = filtro || 'todos'; %>
-  <a href="/admin/clientes?filtro=todos" class="btn <%= filtroActual === 'todos' ? 'btn-active' : 'btn-secondary' %>">Todos</a>
-  <a href="/admin/clientes?filtro=activos" class="btn <%= filtroActual === 'activos' ? 'btn-active' : 'btn-secondary' %>">Activos</a>
-  <a href="/admin/clientes?filtro=vencidos" class="btn <%= filtroActual === 'vencidos' ? 'btn-active' : 'btn-secondary' %>">Vencidos</a>
-</div>
+  <!-- MAIN CONTENT -->
+  <main class="p-8 max-w-7xl mx-auto">
+    <!-- HEADER -->
+    <div class="flex justify-between items-center mb-8">
+      <div>
+        <h1 class="text-4xl font-bold text-white mb-2">👥 Clientes</h1>
+        <p class="text-slate-400">Gestiona tus clientes y suscripciones</p>
+      </div>
+      <a href="/admin/clientes/nuevo" class="px-6 py-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold transition shadow-lg hover:shadow-blue-600/50">+ Nuevo Cliente</a>
+    </div>
 
-<div class="busqueda">
-  <form method="GET" action="/admin/clientes">
-    <input type="hidden" name="filtro" value="<%= filtro %>">
-    <input type="text" name="q" placeholder="Buscar por nombre o CUIT" value="<%= busqueda %>">
-    <button type="submit" class="btn btn-primary">Buscar</button>
-  </form>
-</div>
+    <!-- FILTERS -->
+    <div class="mb-8 bg-slate-800/50 border border-slate-700 rounded-lg p-6">
+      <div class="flex gap-4 items-end mb-4">
+        <div class="flex gap-2">
+          <% const filtroActual = filtro || 'todos'; %>
+          <a href="/admin/clientes?filtro=todos" class="px-4 py-2 rounded-lg font-medium transition <%= filtroActual === 'todos' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600' %>">Todos</a>
+          <a href="/admin/clientes?filtro=activos" class="px-4 py-2 rounded-lg font-medium transition <%= filtroActual === 'activos' ? 'bg-green-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600' %>">Activos</a>
+          <a href="/admin/clientes?filtro=vencidos" class="px-4 py-2 rounded-lg font-medium transition <%= filtroActual === 'vencidos' ? 'bg-red-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600' %>">Vencidos</a>
+        </div>
+      </div>
 
-<a href="/admin/clientes/nuevo" class="btn btn-success">+ Nuevo Cliente</a>
+      <!-- SEARCH -->
+      <form method="GET" action="/admin/clientes" class="flex gap-2">
+        <input type="hidden" name="filtro" value="<%= filtro %>">
+        <input
+          type="text"
+          name="q"
+          placeholder="Buscar por nombre o CUIT..."
+          value="<%= busqueda %>"
+          class="flex-1 px-4 py-2 rounded-lg bg-slate-900 border border-slate-600 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+        >
+        <button type="submit" class="px-6 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium transition">Buscar</button>
+      </form>
+    </div>
 
-<% if (usuarios && usuarios.length > 0) { %>
-<table class="table">
-  <thead>
-    <tr>
-      <th>Nombre</th>
-      <th>CUIT</th>
-      <th>Plan</th>
-      <th>Facturas/Mes</th>
-      <th>Vencimiento</th>
-      <th>Estado</th>
-      <th>Acciones</th>
-    </tr>
-  </thead>
-  <tbody>
-    <% usuarios.forEach(usuario => {
-      const vencido = usuario.fecha_vencimiento < Math.floor(Date.now() / 1000);
-      const estado = vencido ? 'Vencido' : usuario.activo ? 'Activo' : 'Inactivo';
-      const badge = vencido ? 'danger' : usuario.activo ? 'success' : 'warning';
-    %>
-    <tr>
-      <td><a href="/admin/clientes/<%= usuario.id %>"><%= usuario.nombre %></a></td>
-      <td><%= usuario.cuit || '-' %></td>
-      <td><%= usuario.plan.toUpperCase() %></td>
-      <td><%= usuario.facturas_mes_actual %>/<%= usuario.limite_facturas_mes === -1 ? '∞' : usuario.limite_facturas_mes %></td>
-      <td><%= usuario.fecha_vencimiento ? new Date(usuario.fecha_vencimiento * 1000).toLocaleDateString('es-AR') : '-' %></td>
-      <td><span class="badge badge-<%= badge %>"><%= estado %></span></td>
-      <td>
-        <a href="/admin/clientes/<%= usuario.id %>" class="btn btn-secondary" style="font-size: 12px;">Ver</a>
-      </td>
-    </tr>
-    <% }); %>
-  </tbody>
-</table>
-<% } else { %>
-<p>No hay clientes registrados</p>
-<% } %>
+    <!-- TABLE -->
+    <div class="bg-slate-800/50 border border-slate-700 rounded-lg overflow-hidden">
+      <% if (usuarios && usuarios.length > 0) { %>
+      <div class="overflow-x-auto">
+        <table class="w-full">
+          <thead class="border-b border-slate-700 bg-slate-800/80">
+            <tr>
+              <th class="text-left px-6 py-4 text-slate-300 font-semibold text-sm">Nombre</th>
+              <th class="text-left px-6 py-4 text-slate-300 font-semibold text-sm">CUIT</th>
+              <th class="text-left px-6 py-4 text-slate-300 font-semibold text-sm">Plan</th>
+              <th class="text-left px-6 py-4 text-slate-300 font-semibold text-sm">Facturas/Mes</th>
+              <th class="text-left px-6 py-4 text-slate-300 font-semibold text-sm">Vencimiento</th>
+              <th class="text-left px-6 py-4 text-slate-300 font-semibold text-sm">Estado</th>
+              <th class="text-left px-6 py-4 text-slate-300 font-semibold text-sm">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% usuarios.forEach(usuario => {
+              const vencido = usuario.fecha_vencimiento < Math.floor(Date.now() / 1000);
+              const estado = vencido ? 'Vencido' : usuario.activo ? 'Activo' : 'Inactivo';
+              const badgeColor = vencido ? 'bg-red-600/20 text-red-300 border-red-500/30' : usuario.activo ? 'bg-green-600/20 text-green-300 border-green-500/30' : 'bg-yellow-600/20 text-yellow-300 border-yellow-500/30';
+            %>
+            <tr class="border-b border-slate-700/50 hover:bg-slate-700/20 transition">
+              <td class="px-6 py-4"><a href="/admin/clientes/<%= usuario.id %>" class="font-semibold text-blue-400 hover:text-blue-300"><%= usuario.nombre %></a></td>
+              <td class="px-6 py-4"><code class="bg-slate-900 px-2 py-1 rounded text-sm text-slate-300"><%= usuario.cuit || '-' %></code></td>
+              <td class="px-6 py-4">
+                <span class="<%= usuario.plan === 'premium' ? 'text-purple-400' : 'text-slate-300' %>">
+                  <%= usuario.plan.charAt(0).toUpperCase() + usuario.plan.slice(1) %>
+                </span>
+              </td>
+              <td class="px-6 py-4 text-slate-300"><%= usuario.facturas_mes_actual || 0 %>/<%= usuario.limite_facturas_mes === -1 ? '∞' : usuario.limite_facturas_mes %></td>
+              <td class="px-6 py-4 text-slate-400"><%= usuario.fecha_vencimiento ? new Date(usuario.fecha_vencimiento * 1000).toLocaleDateString('es-AR') : '-' %></td>
+              <td class="px-6 py-4">
+                <span class="px-3 py-1 rounded-lg border text-xs font-medium <%= badgeColor %>"><%= estado %></span>
+              </td>
+              <td class="px-6 py-4">
+                <a href="/admin/clientes/<%= usuario.id %>" class="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-sm font-medium transition">Ver</a>
+              </td>
+            </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+      <% } else { %>
+      <div class="text-center py-12 text-slate-400">
+        <p class="text-3xl mb-4">👥</p>
+        <p class="text-lg">Sin clientes registrados</p>
+        <p class="text-sm mt-2">Comienza a crear tus primeros clientes</p>
+        <a href="/admin/clientes/nuevo" class="inline-block mt-4 px-6 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white font-medium transition">+ Nuevo Cliente</a>
+      </div>
+      <% } %>
+    </div>
+  </main>
 
-<style>
-  .filtros {
-    margin: 20px 0;
-    display: flex;
-    gap: 10px;
-  }
-
-  .btn-active {
-    background: #667eea !important;
-    color: white !important;
-  }
-
-  .busqueda {
-    display: flex;
-    gap: 10px;
-    margin: 20px 0;
-  }
-
-  .busqueda form {
-    display: flex;
-    gap: 10px;
-    width: 100%;
-  }
-
-  .busqueda input {
-    flex: 1;
-  }
-</style>
+  <!-- FOOTER -->
+  <footer class="text-center py-8 text-slate-500 text-sm border-t border-slate-800 mt-12">
+    <p>&copy; 2024 Bot de Facturación Electrónica Argentina. Todos los derechos reservados.</p>
+  </footer>
+</body>
+</html>
