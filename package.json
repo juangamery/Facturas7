@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node src/index.js",
-    "build": "cd frontend && npm install && npm run build && cd ..",
+    "build": "cd frontend && npm install && npm run build && cd .. && mkdir -p public && cp -r frontend/dist/* public/",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
