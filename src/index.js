@@ -52,7 +52,8 @@ app.set('views', path.join(__dirname, 'admin/views'));
 app.set('view cache', false); // Deshabilitar caché para desarrollo
 
 // Sesiones para el panel admin con SQLite store persistente
-const store = new (SQLiteStore(session))({
+const Store = SQLiteStore(session);
+const store = new Store({
   db: 'sessions.db',
   dir: path.join(__dirname, '../'),
   table: 'sessions'
@@ -67,7 +68,7 @@ app.use(session({
     secure: true,
     httpOnly: true,
     sameSite: 'lax',
-    maxAge: 7 * 24 * 60 * 60 * 1000 // 7 días
+    maxAge: 7 * 24 * 60 * 60 * 1000
   }
 }));
 
