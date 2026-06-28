@@ -1,10 +1,3 @@
 {
-  "buildCommand": "cd frontend && npm install && npm run build && cd ..",
-  "public": "frontend/dist",
-  "routes": [
-    { "src": "/api/(.*)", "dest": "/api/handler.js" },
-    { "src": "/admin/(.*)", "dest": "/api/handler.js" },
-    { "src": "/webhook/(.*)", "dest": "/api/handler.js" },
-    { "src": "/(.*)", "dest": "/api/handler.js" }
-  ]
+  "buildCommand": "cd frontend && npm install && npm run build && cd .."
 }
