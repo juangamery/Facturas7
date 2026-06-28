@@ -18,6 +18,7 @@ import { fileURLToPath } from 'url';
 
 // Importar módulos propios
 import { inicializarDB, limpiarDatos, getDB, actualizarUsuario } from './db.js';
+import { initLocalDB } from './db-local.js';
 import { logger } from './logger.js';
 import webhookWhatsApp from './bot/webhook.js';
 import adminRoutes from './admin/routes.js';
@@ -99,6 +100,9 @@ async function iniciar() {
     logger.info('Inicializando base de datos...');
     await inicializarDB();
     logger.info('Base de datos lista ✅');
+
+    // 1b. Inicializar SQLite local para admin panel
+    await initLocalDB();
 
     // 2. Limpiar datos viejos (conversaciones, archivos temporales, etc)
     // Esto se ejecuta cada hora
