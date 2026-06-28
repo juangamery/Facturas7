@@ -24,6 +24,7 @@
     "@supabase/supabase-js": "^2.39.0",
     "axios": "^1.6.5",
     "bcrypt": "^5.1.1",
+    "better-sqlite3": "^12.11.1",
     "connect-sqlite3": "^0.9.16",
     "cookie-parser": "^1.4.7",
     "dotenv": "^16.3.1",

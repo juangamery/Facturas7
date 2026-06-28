@@ -15,6 +15,7 @@ import {
   obtenerUltimaFactura,
   getDB
 } from '../db.js';
+import { getLocalDB } from '../db-local.js';
 import { logger, logearError } from '../logger.js';
 import { validarCUIT, validarDocumento, validarImporte } from '../facturacion/validaciones.js';
 import { generarPDFFactura } from '../facturacion/pdf.js';
@@ -45,7 +46,8 @@ router.get('/info', (req, res) => {
 
 // Redirect raíz de admin a dashboard
 router.get('/', (req, res) => {
-  if (req.session?.user?.logueado) {
+  const token = req.cookies?.auth_token;
+  if (token) {
     res.redirect('/admin/dashboard');
   } else {
     res.redirect('/admin/login');
@@ -55,7 +57,7 @@ router.get('/', (req, res) => {
 // GET /admin/stats - Endpoint público con stats (JSON)
 router.get('/stats', (req, res) => {
   try {
-    const db = getDB();
+    const db = getLocalDB();
 
     const usuariosActivos = db.prepare(
       'SELECT COUNT(*) as count FROM usuarios WHERE activo = 1'
@@ -100,7 +102,7 @@ router.get('/stats', (req, res) => {
 // GET /admin/facturas-json - Endpoint público lista facturas (JSON)
 router.get('/facturas-json', (req, res) => {
   try {
-    const db = getDB();
+    const db = getLocalDB();
     const busqueda = req.query.q || '';
 
     let query = `
@@ -129,7 +131,7 @@ router.get('/facturas-json', (req, res) => {
 // GET /admin/clientes-json - Endpoint público lista clientes (JSON)
 router.get('/clientes-json', (req, res) => {
   try {
-    const db = getDB();
+    const db = getLocalDB();
     const busqueda = req.query.q || '';
 
     let query = 'SELECT * FROM usuarios WHERE 1=1';
@@ -154,7 +156,7 @@ router.get('/clientes-json', (req, res) => {
 // GET /admin/facturas-descargar/:id - Descargar PDF (PÚBLICO)
 router.get('/facturas-descargar/:id', (req, res) => {
   try {
-    const db = getDB();
+    const db = getLocalDB();
     const factura = db.prepare('SELECT pdf_path, numero_factura FROM facturas WHERE id = ?').get(req.params.id);
 
     if (!factura || !factura.pdf_path) {
@@ -177,7 +179,7 @@ router.get('/facturas-descargar/:id', (req, res) => {
 router.post('/clientes-nuevo', (req, res) => {
   try {
     const { nombre, numero_telefono, cuit, razon_social, plan, email } = req.body;
-    const db = getDB();
+    const db = getLocalDB();
 
     if (!nombre || !numero_telefono) {
       return res.status(400).json({ error: 'Nombre y teléfono son obligatorios' });
@@ -225,7 +227,7 @@ router.post('/clientes-nuevo', (req, res) => {
 router.post('/facturas-nuevo', async (req, res) => {
   try {
     const { usuario_id, documento_cliente, razon_social_cliente, concepto, importe } = req.body;
-    const db = getDB();
+    const db = getLocalDB();
 
     const usuario = db.prepare('SELECT * FROM usuarios WHERE id = ?').get(usuario_id);
     if (!usuario) {
@@ -349,7 +351,7 @@ router.use(requireAuth);
 // GET /admin/dashboard - Panel principal con estadísticas
 router.get('/dashboard', (req, res) => {
   try {
-    const db = getDB();
+    const db = getLocalDB();
 
     // Estadísticas generales
     const usuariosActivos = db.prepare(
@@ -407,7 +409,7 @@ router.get('/dashboard', (req, res) => {
 // GET /admin/clientes - Lista de clientes
 router.get('/clientes', (req, res) => {
   try {
-    const db = getDB();
+    const db = getLocalDB();
     const filtro = req.query.filtro || 'todos'; // todos, activos, vencidos
     const busqueda = req.query.q || '';
 
@@ -450,7 +452,7 @@ router.get('/clientes/nuevo', (req, res) => {
 router.post('/clientes/nuevo', (req, res) => {
   try {
     const { nombre, numero_telefono, cuit, razon_social, plan } = req.body;
-    const db = getDB();
+    const db = getLocalDB();
 
     // Validar campos obligatorios
     if (!nombre || !numero_telefono) {
@@ -555,7 +557,7 @@ router.post('/clientes/:id/extender', (req, res) => {
 // GET /admin/facturas - Historial de facturas
 router.get('/facturas', (req, res) => {
   try {
-    const db = getDB();
+    const db = getLocalDB();
     const filtro = req.query.filtro || 'todas';
     const busqueda = req.query.q || '';
 
@@ -589,7 +591,7 @@ router.get('/facturas', (req, res) => {
 // GET /admin/facturas/nuevo - Formulario nueva factura
 router.get('/facturas/nuevo', (req, res) => {
   try {
-    const db = getDB();
+    const db = getLocalDB();
     const usuarios = db.prepare('SELECT id, nombre, cuit, razon_social FROM usuarios WHERE activo = 1 ORDER BY nombre').all();
 
     res.render('factura-nueva', {
@@ -606,7 +608,7 @@ router.get('/facturas/nuevo', (req, res) => {
 router.post('/facturas/nuevo', async (req, res) => {
   try {
     const { usuario_id, documento_cliente, razon_social_cliente, concepto, importe } = req.body;
-    const db = getDB();
+    const db = getLocalDB();
 
     // Validar usuario existe
     const usuario = obtenerUsuarioPorID(usuario_id);
@@ -699,7 +701,7 @@ router.post('/facturas/nuevo', async (req, res) => {
 // GET /admin/comprobantes - Lista comprobantes pendientes
 router.get('/comprobantes', (req, res) => {
   try {
-    const db = getDB();
+    const db = getLocalDB();
     const comprobantes = db.prepare(`
       SELECT * FROM comprobantes_pago
       WHERE estado = 'PENDIENTE'
@@ -717,7 +719,7 @@ router.get('/comprobantes', (req, res) => {
 // POST /admin/comprobantes/:id/aprobar - Aprobar comprobante
 router.post('/comprobantes/:id/aprobar', async (req, res) => {
   try {
-    const db = getDB();
+    const db = getLocalDB();
     const { id } = req.params;
     const { verificado_por } = req.body;
 
@@ -755,7 +757,7 @@ router.post('/comprobantes/:id/aprobar', async (req, res) => {
 // POST /admin/comprobantes/:id/rechazar - Rechazar comprobante
 router.post('/comprobantes/:id/rechazar', async (req, res) => {
   try {
-    const db = getDB();
+    const db = getLocalDB();
     const { id } = req.params;
     const { razon, verificado_por } = req.body;
 
