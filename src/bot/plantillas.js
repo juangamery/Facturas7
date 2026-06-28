@@ -31,7 +31,7 @@ Para aumentar tu límite contactanos.`,
 2️⃣ Ver mi última factura
 3️⃣ Ver mis datos
 
-O mandá directo una 📸 foto o 🎤 audio con los datos.`,
+Respondé 1, 2 o 3 (o CANCELAR para salir)`,
 
   // ===== FLUJO TEXTO =====
   PREGUNTA_CLIENTE: `📋 ¿A nombre de quién va la factura?
@@ -190,7 +190,12 @@ Estamos investigando. Intentá de nuevo en unos minutos.`,
 Ejemplo: 15000 (para $15.000)`,
 
   // ===== CANCELACIÓN =====
-  CANCELADO: `❌ Cancelado.
+  CANCELADO: `❌ Cancelado. Volvemos al menú.`,
 
-Escribí cualquier cosa para continuar.`
+  // ===== OFF-TOPIC =====
+  NO_ENTIENDO: `❌ No entiendo ese comando.
+
+Seguimos con el flujo.`,
+
+  FUERA_DE_FLUJO: `❌ Eso no corresponde ahora. Seguimos...`
 };
