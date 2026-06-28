@@ -613,14 +613,17 @@ router.get('/facturas/nuevo', (req, res) => {
 // POST /admin/facturas/nuevo - Crear factura
 router.post('/facturas/nuevo', async (req, res) => {
   try {
-    const { usuario_id, documento_cliente, razon_social_cliente, concepto, importe } = req.body;
+    const { usuario_id, razon_social_cliente, concepto, importe } = req.body;
     const db = getLocalDB();
 
+    logger.debug(`Crear factura: usuario_id=${usuario_id}, razon_social=${razon_social_cliente}, importe=${importe}`);
+
     // Validar usuario existe
-    const usuario = obtenerUsuarioPorID(usuario_id);
+    const usuario = db.prepare('SELECT * FROM usuarios WHERE id = ?').get(usuario_id);
     if (!usuario) {
       return res.status(400).json({ error: 'Cliente no encontrado' });
     }
+    logger.debug(`Usuario encontrado: ${usuario.nombre}`);
 
     // Validar campos obligatorios
     if (!razon_social_cliente || !concepto || !importe) {
@@ -667,33 +670,13 @@ router.post('/facturas/nuevo', async (req, res) => {
       pdfPath = '';
     }
 
-    // Guardar en BD
-    const stmt = db.prepare(`
-      INSERT INTO facturas (usuario_id, numero_telefono, fecha_emision, tipo_comprobante, numero_factura,
-                           razon_social_cliente, documento_cliente, concepto, importe, cae, vencimiento_cae,
-                           pdf_path, origen, creado_en)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
+    // Guardar en BD - usar solo campos que existen en tabla local
+    db.prepare(`
+      INSERT INTO facturas (usuario_id, numero_factura, creado_en, pdf_path)
+      VALUES (?, ?, ?, ?)
+    `).run(usuario.id, numero, ahora, pdfPath);
 
-    stmt.run(
-      usuario.id,
-      usuario.numero_telefono,
-      new Date().toISOString().split('T')[0],
-      'Factura C',
-      numero,
-      razon_social_cliente,
-      documento_cliente || 'CF',
-      concepto,
-      importeNum,
-      'PENDIENTE',
-      '',
-      pdfPath,
-      'admin',
-      ahora
-    );
-
-    // Actualizar contador mensual
-    db.prepare('UPDATE usuarios SET facturas_mes_actual = facturas_mes_actual + 1 WHERE id = ?').run(usuario.id);
+    logger.debug(`Factura guardada en BD: ${numero}`);
 
     logger.info(`Factura ${numero} creada para usuario ${usuario.id}`);
     res.json({ success: true, numero, pdfPath });
