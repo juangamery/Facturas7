@@ -629,7 +629,7 @@ router.get('/debug/db-status', (req, res) => {
 });
 
 // POST /admin/facturas/nuevo - Crear factura
-router.post('/facturas/nuevo', (req, res) => {
+router.post('/facturas/nuevo', async (req, res) => {
   try {
     logger.info('=== POST /facturas/nuevo START ===');
 
@@ -637,15 +637,20 @@ router.post('/facturas/nuevo', (req, res) => {
     logger.info(`1. Datos: usuario_id=${usuario_id}, concepto=${concepto}, importe=${importe}`);
 
     if (!usuario_id || !concepto || !importe) {
-      logger.error(`2. FALTA CAMPO: usuario_id=${usuario_id}, concepto=${concepto}, importe=${importe}`);
+      logger.error(`2. FALTA CAMPO`);
       return res.status(400).json({ error: 'Faltan: usuario_id, concepto, importe' });
     }
 
-    const db = getLocalDB();
-    logger.info('3. DB conectada');
+    const db = getDB(); // Supabase, no local
+    logger.info('3. Conectando a Supabase...');
 
-    // Check usuario exists
-    const usr = db.prepare('SELECT id FROM usuarios WHERE id = ?').get(usuario_id);
+    // Check usuario exists en Supabase
+    const { data: usr } = await db
+      .from('usuarios')
+      .select('id')
+      .eq('id', usuario_id)
+      .single();
+
     if (!usr) {
       logger.error(`4. Usuario NOT FOUND: ${usuario_id}`);
       return res.status(400).json({ error: `Usuario ${usuario_id} no existe` });
@@ -656,12 +661,21 @@ router.post('/facturas/nuevo', (req, res) => {
     const numero = `${Math.floor(Date.now() / 1000)}`;
     const ahora = Math.floor(Date.now() / 1000);
 
-    // INSERT simple
-    logger.info(`5. INSERT: usuario_id=${usuario_id}, numero=${numero}`);
-    db.prepare(`
-      INSERT INTO facturas (usuario_id, numero_factura, creado_en, pdf_path)
-      VALUES (?, ?, ?, ?)
-    `).run(usuario_id, numero, ahora, '');
+    // INSERT a Supabase
+    logger.info(`5. INSERT a Supabase: usuario_id=${usuario_id}, numero=${numero}`);
+    const { error: insertError } = await db
+      .from('facturas')
+      .insert({
+        usuario_id,
+        numero_factura: numero,
+        creado_en: ahora,
+        pdf_path: ''
+      });
+
+    if (insertError) {
+      logger.error(`❌ INSERT error: ${insertError.message}`);
+      return res.status(500).json({ error: insertError.message });
+    }
 
     logger.info(`✅ ÉXITO: ${numero}`);
     res.json({ success: true, numero, mensaje: 'Factura creada' });
