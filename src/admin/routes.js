@@ -610,6 +610,24 @@ router.get('/facturas/nuevo', (req, res) => {
   }
 });
 
+// DEBUG: Check DB status
+router.get('/debug/db-status', (req, res) => {
+  try {
+    const db = getLocalDB();
+    const usuarios = db.prepare('SELECT COUNT(*) as count FROM usuarios').get();
+    const facturas = db.prepare('SELECT COUNT(*) as count FROM facturas').get();
+
+    res.json({
+      status: 'ok',
+      usuarios_count: usuarios.count,
+      facturas_count: facturas.count,
+      db_path: process.env.DATABASE_URL || 'local sqlite'
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // POST /admin/facturas/nuevo - Crear factura
 router.post('/facturas/nuevo', (req, res) => {
   try {
@@ -626,12 +644,20 @@ router.post('/facturas/nuevo', (req, res) => {
     const db = getLocalDB();
     logger.info('3. DB conectada');
 
+    // Check usuario exists
+    const usr = db.prepare('SELECT id FROM usuarios WHERE id = ?').get(usuario_id);
+    if (!usr) {
+      logger.error(`4. Usuario NOT FOUND: ${usuario_id}`);
+      return res.status(400).json({ error: `Usuario ${usuario_id} no existe` });
+    }
+    logger.info(`4. Usuario OK: ${usuario_id}`);
+
     // Generar número
     const numero = `${Math.floor(Date.now() / 1000)}`;
     const ahora = Math.floor(Date.now() / 1000);
 
     // INSERT simple
-    logger.info(`4. INSERT: usuario_id=${usuario_id}, numero=${numero}`);
+    logger.info(`5. INSERT: usuario_id=${usuario_id}, numero=${numero}`);
     db.prepare(`
       INSERT INTO facturas (usuario_id, numero_factura, creado_en, pdf_path)
       VALUES (?, ?, ?, ?)
