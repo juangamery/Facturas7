@@ -645,41 +645,46 @@ router.post('/facturas/nuevo', async (req, res) => {
     const ahora = Math.floor(Date.now() / 1000);
     const numero = `${ahora}`;
 
-    // Generar PDF
-    let pdfPath = '';
+    logger.debug(`Creando factura: ${numero} para usuario ${usuario.id}`);
+
+    // Guardar en BD primero (simple insert)
     try {
-      pdfPath = await generarPDFFactura({
-        numero_factura: numero,
-        fecha_emision: new Date().toISOString().split('T')[0],
-        razon_social_cliente: razon_social_cliente,
-        documento_cliente: documento_cliente || 'CF',
-        domicilio_cliente: usuario.domicilio || '',
-        razon_social_emisor: usuario.razon_social,
-        cuit_emisor: usuario.cuit,
-        domicilio_emisor: usuario.domicilio,
-        condicion_iva: usuario.condicion_iva,
-        concepto,
-        importe: importeNum,
-        tipo_comprobante: 'Factura C',
-        punto_venta: usuario.punto_venta || 1,
-        cae: 'PENDIENTE'
-      });
-      logger.info(`PDF generado: ${pdfPath}`);
-    } catch (pdfError) {
-      logger.warn(`No se generó PDF: ${pdfError.message}`);
-      pdfPath = '';
+      db.prepare(`
+        INSERT INTO facturas (usuario_id, numero_factura, creado_en, pdf_path)
+        VALUES (?, ?, ?, ?)
+      `).run(usuario.id, numero, ahora, '');
+      logger.info(`✅ Factura guardada: ${numero}`);
+    } catch (dbError) {
+      logger.error(`BD error: ${dbError.message}`);
+      return res.status(400).json({ error: `BD error: ${dbError.message}` });
     }
 
-    // Guardar en BD - usar solo campos que existen en tabla local
-    db.prepare(`
-      INSERT INTO facturas (usuario_id, numero_factura, creado_en, pdf_path)
-      VALUES (?, ?, ?, ?)
-    `).run(usuario.id, numero, ahora, pdfPath);
+    // Generar PDF en background (no bloquea respuesta)
+    try {
+      if (usuario.razon_social && usuario.cuit) {
+        const pdfPath = await generarPDFFactura({
+          numero_factura: numero,
+          fecha_emision: new Date().toISOString().split('T')[0],
+          razon_social_cliente: razon_social_cliente,
+          documento_cliente: documento_cliente || 'CF',
+          domicilio_cliente: usuario.domicilio || '',
+          razon_social_emisor: usuario.razon_social,
+          cuit_emisor: usuario.cuit,
+          domicilio_emisor: usuario.domicilio || '',
+          condicion_iva: usuario.condicion_iva || 'Monotributista',
+          concepto,
+          importe: importeNum,
+          tipo_comprobante: 'Factura C',
+          punto_venta: usuario.punto_venta || 1,
+          cae: 'PENDIENTE'
+        });
+        logger.info(`📄 PDF generado: ${pdfPath}`);
+      }
+    } catch (pdfError) {
+      logger.warn(`⚠️ PDF no se generó: ${pdfError.message}`);
+    }
 
-    logger.debug(`Factura guardada en BD: ${numero}`);
-
-    logger.info(`Factura ${numero} creada para usuario ${usuario.id}`);
-    res.json({ success: true, numero, pdfPath });
+    res.json({ success: true, numero, mensaje: 'Factura creada' });
 
   } catch (error) {
     logearError(error, 'Crear factura');
