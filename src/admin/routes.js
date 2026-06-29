@@ -611,98 +611,38 @@ router.get('/facturas/nuevo', (req, res) => {
 });
 
 // POST /admin/facturas/nuevo - Crear factura
-router.post('/facturas/nuevo', async (req, res) => {
+router.post('/facturas/nuevo', (req, res) => {
   try {
     logger.info('=== POST /facturas/nuevo START ===');
 
-    const { usuario_id, razon_social_cliente, documento_cliente, concepto, importe } = req.body;
-    logger.info(`1. Datos recibidos: usuario_id=${usuario_id}, cliente=${razon_social_cliente}, importe=${importe}`);
+    const { usuario_id, concepto, importe } = req.body;
+    logger.info(`1. Datos: usuario_id=${usuario_id}, concepto=${concepto}, importe=${importe}`);
+
+    if (!usuario_id || !concepto || !importe) {
+      logger.error(`2. FALTA CAMPO: usuario_id=${usuario_id}, concepto=${concepto}, importe=${importe}`);
+      return res.status(400).json({ error: 'Faltan: usuario_id, concepto, importe' });
+    }
 
     const db = getLocalDB();
-    logger.info('2. DB conectada');
+    logger.info('3. DB conectada');
 
-    // Validar usuario existe
-    let usuario;
-    try {
-      usuario = db.prepare('SELECT * FROM usuarios WHERE id = ?').get(usuario_id);
-      logger.info(`3. Usuario query OK: ${usuario ? 'encontrado' : 'NO encontrado'}`);
-    } catch (err) {
-      logger.error(`3. Error en query usuario: ${err.message}`);
-      return res.status(500).json({ error: `Usuario query: ${err.message}` });
-    }
-
-    if (!usuario) {
-      return res.status(400).json({ error: 'Cliente no encontrado' });
-    }
-
-    // Validar campos obligatorios
-    if (!razon_social_cliente || !concepto || !importe) {
-      return res.status(400).json({ error: 'Faltan campos obligatorios' });
-    }
-    logger.info('4. Campos obligatorios OK');
-
-    // Validar importe
-    const importeNum = parseFloat(importe);
-    if (isNaN(importeNum) || importeNum <= 0) {
-      return res.status(400).json({ error: 'Importe debe ser mayor a 0' });
-    }
-    logger.info('5. Validaciones OK');
-
-    // Generar número de factura
+    // Generar número
+    const numero = `${Math.floor(Date.now() / 1000)}`;
     const ahora = Math.floor(Date.now() / 1000);
-    const numero = `${ahora}`;
 
-    logger.debug(`Creando factura: ${numero} para usuario ${usuario.id}`);
+    // INSERT simple
+    logger.info(`4. INSERT: usuario_id=${usuario_id}, numero=${numero}`);
+    db.prepare(`
+      INSERT INTO facturas (usuario_id, numero_factura, creado_en, pdf_path)
+      VALUES (?, ?, ?, ?)
+    `).run(usuario_id, numero, ahora, '');
 
-    // Guardar en BD primero (simple insert)
-    logger.info(`6. Insertando en BD: numero=${numero}, usuario=${usuario.id}, ahora=${ahora}`);
-    try {
-      const stmt = db.prepare(`
-        INSERT INTO facturas (usuario_id, numero_factura, creado_en, pdf_path)
-        VALUES (?, ?, ?, ?)
-      `);
-      logger.info('6a. Statement preparado');
-
-      stmt.run(usuario.id, numero, ahora, '');
-      logger.info(`✅ 7. Factura guardada: ${numero}`);
-    } catch (dbError) {
-      logger.error(`❌ BD error: ${dbError.message}`);
-      return res.status(500).json({ error: `BD insert: ${dbError.message}` });
-    }
-
-    // Generar PDF en background (no bloquea respuesta)
-    try {
-      if (usuario.razon_social && usuario.cuit) {
-        const pdfPath = await generarPDFFactura({
-          numero_factura: numero,
-          fecha_emision: new Date().toISOString().split('T')[0],
-          razon_social_cliente: razon_social_cliente,
-          documento_cliente: documento_cliente || 'CF',
-          domicilio_cliente: usuario.domicilio || '',
-          razon_social_emisor: usuario.razon_social,
-          cuit_emisor: usuario.cuit,
-          domicilio_emisor: usuario.domicilio || '',
-          condicion_iva: usuario.condicion_iva || 'Monotributista',
-          concepto,
-          importe: importeNum,
-          tipo_comprobante: 'Factura C',
-          punto_venta: usuario.punto_venta || 1,
-          cae: 'PENDIENTE'
-        });
-        logger.info(`📄 PDF generado: ${pdfPath}`);
-      }
-    } catch (pdfError) {
-      logger.warn(`⚠️ PDF no se generó: ${pdfError.message}`);
-    }
-
-    logger.info(`=== ✅ ÉXITO: Factura ${numero} creada ===`);
+    logger.info(`✅ ÉXITO: ${numero}`);
     res.json({ success: true, numero, mensaje: 'Factura creada' });
 
   } catch (error) {
-    logger.error(`=== ❌ ERROR EN POST /facturas/nuevo ===`);
-    logger.error(`Error: ${error.message}`);
-    logger.error(`Stack: ${error.stack}`);
-    res.status(500).json({ error: error.message, stack: error.stack.substring(0, 200) });
+    logger.error(`❌ ERROR: ${error.message}`);
+    res.status(500).json({ error: error.message });
   }
 });
 
