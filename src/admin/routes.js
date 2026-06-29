@@ -413,39 +413,36 @@ router.get('/dashboard', (req, res) => {
 });
 
 // GET /admin/clientes - Lista de clientes
-router.get('/clientes', (req, res) => {
+router.get('/clientes', async (req, res) => {
   try {
-    const db = getLocalDB();
-    const filtro = req.query.filtro || 'todos'; // todos, activos, vencidos
+    const db = getDB();
+    const filtro = req.query.filtro || 'todos';
     const busqueda = req.query.q || '';
 
-    let query = 'SELECT * FROM usuarios WHERE 1=1';
-    const params = [];
+    let query = db.from('usuarios').select('*');
 
     if (filtro === 'activos') {
-      query += ' AND activo = 1 AND fecha_vencimiento > strftime("%s", "now")';
+      query = query.eq('activo', 1);
     } else if (filtro === 'vencidos') {
-      query += ' AND (activo = 0 OR fecha_vencimiento < strftime("%s", "now"))';
+      query = query.or(`activo.eq.0,fecha_vencimiento.lt.${Math.floor(Date.now() / 1000)}`);
     }
 
     if (busqueda) {
-      query += ' AND (nombre LIKE ? OR cuit LIKE ?)';
-      params.push(`%${busqueda}%`, `%${busqueda}%`);
+      query = query.or(`nombre.ilike.%${busqueda}%,cuit.ilike.%${busqueda}%`);
     }
 
-    query += ' ORDER BY nombre ASC';
-    const usuarios = db.prepare(query).all(...params);
+    const { data: usuarios } = await query.order('nombre');
 
     res.render('clientes', {
       title: 'Clientes',
-      usuarios,
+      usuarios: usuarios || [],
       filtro,
       busqueda
     });
 
   } catch (error) {
-    logearError(error, 'Clientes');
-    res.render('clientes', { title: 'Clientes', usuarios: [], filtro: 'todos', busqueda: '', error: 'Error cargando clientes' });
+    logger.error(`Clientes: ${error.message}`);
+    res.render('clientes', { title: 'Clientes', usuarios: [], filtro: 'todos', busqueda: '' });
   }
 });
 
@@ -561,52 +558,48 @@ router.post('/clientes/:id/extender', (req, res) => {
 });
 
 // GET /admin/facturas - Historial de facturas
-router.get('/facturas', (req, res) => {
+router.get('/facturas', async (req, res) => {
   try {
-    const db = getLocalDB();
-    const filtro = req.query.filtro || 'todas';
+    const db = getDB();
     const busqueda = req.query.q || '';
 
-    let query = `
-      SELECT f.*, u.nombre FROM facturas f
-      JOIN usuarios u ON f.usuario_id = u.id
-      WHERE 1=1
-    `;
-    const params = [];
+    let query = db.from('facturas').select('*, usuarios(nombre)').order('creado_en', { ascending: false });
 
     if (busqueda) {
-      query += ' AND (u.nombre LIKE ? OR f.numero_factura LIKE ?)';
-      params.push(`%${busqueda}%`, `%${busqueda}%`);
+      query = query.or(`numero_factura.ilike.%${busqueda}%,usuarios.nombre.ilike.%${busqueda}%`);
     }
 
-    query += ' ORDER BY f.creado_en DESC';
-    const facturas = db.prepare(query).all(...params);
+    const { data: facturas } = await query;
 
     res.render('facturas', {
       title: 'Facturas',
-      facturas,
+      facturas: facturas || [],
       busqueda
     });
 
   } catch (error) {
-    logearError(error, 'Facturas');
+    logger.error(`Facturas: ${error.message}`);
     res.render('facturas', { title: 'Facturas', error: 'Error cargando facturas' });
   }
 });
 
 // GET /admin/facturas/nuevo - Formulario nueva factura
-router.get('/facturas/nuevo', (req, res) => {
+router.get('/facturas/nuevo', async (req, res) => {
   try {
-    const db = getLocalDB();
-    const usuarios = db.prepare('SELECT id, nombre, cuit, razon_social FROM usuarios WHERE activo = 1 ORDER BY nombre').all();
+    const db = getDB();
+    const { data: usuarios } = await db
+      .from('usuarios')
+      .select('id, nombre, cuit, razon_social')
+      .eq('activo', 1)
+      .order('nombre');
 
     res.render('factura-nueva', {
       title: 'Nueva Factura',
-      usuarios
+      usuarios: usuarios || []
     });
   } catch (error) {
-    logearError(error, 'Formulario nueva factura');
-    res.status(500).render('error', { error: error.message });
+    logger.error(`Formulario nueva factura: ${error.message}`);
+    res.status(500).json({ error: error.message });
   }
 });
 
