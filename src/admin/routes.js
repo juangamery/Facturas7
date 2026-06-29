@@ -631,57 +631,32 @@ router.get('/debug/db-status', (req, res) => {
 // POST /admin/facturas/nuevo - Crear factura
 router.post('/facturas/nuevo', async (req, res) => {
   try {
-    logger.info('=== POST /facturas/nuevo START ===');
-
     const { usuario_id, concepto, importe } = req.body;
-    logger.info(`1. Datos: usuario_id=${usuario_id}, concepto=${concepto}, importe=${importe}`);
 
     if (!usuario_id || !concepto || !importe) {
-      logger.error(`2. FALTA CAMPO`);
-      return res.status(400).json({ error: 'Faltan: usuario_id, concepto, importe' });
+      return res.status(400).json({ error: 'Faltan campos' });
     }
 
-    const db = getDB(); // Supabase, no local
-    logger.info('3. Conectando a Supabase...');
-
-    // Check usuario exists en Supabase
-    const { data: usr } = await db
-      .from('usuarios')
-      .select('id')
-      .eq('id', usuario_id)
-      .single();
-
-    if (!usr) {
-      logger.error(`4. Usuario NOT FOUND: ${usuario_id}`);
-      return res.status(400).json({ error: `Usuario ${usuario_id} no existe` });
-    }
-    logger.info(`4. Usuario OK: ${usuario_id}`);
-
-    // Generar número
-    const numero = `${Math.floor(Date.now() / 1000)}`;
+    const db = getDB();
+    const numero = `FAC-${Date.now()}`;
     const ahora = Math.floor(Date.now() / 1000);
 
-    // INSERT a Supabase
-    logger.info(`5. INSERT a Supabase: usuario_id=${usuario_id}, numero=${numero}`);
-    const { error: insertError } = await db
+    // INSERT directo sin validar nada
+    const { error } = await db
       .from('facturas')
       .insert({
-        usuario_id,
+        usuario_id: parseInt(usuario_id),
         numero_factura: numero,
         creado_en: ahora,
         pdf_path: ''
       });
 
-    if (insertError) {
-      logger.error(`❌ INSERT error: ${insertError.message}`);
-      return res.status(500).json({ error: insertError.message });
-    }
+    if (error) throw error;
 
-    logger.info(`✅ ÉXITO: ${numero}`);
-    res.json({ success: true, numero, mensaje: 'Factura creada' });
+    res.json({ success: true, numero });
 
   } catch (error) {
-    logger.error(`❌ ERROR: ${error.message}`);
+    logger.error(`Factura error: ${error.message}`);
     res.status(500).json({ error: error.message });
   }
 });
