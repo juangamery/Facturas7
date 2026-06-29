@@ -613,33 +613,40 @@ router.get('/facturas/nuevo', (req, res) => {
 // POST /admin/facturas/nuevo - Crear factura
 router.post('/facturas/nuevo', async (req, res) => {
   try {
-    const { usuario_id, razon_social_cliente, documento_cliente, concepto, importe } = req.body;
-    const db = getLocalDB();
+    logger.info('=== POST /facturas/nuevo START ===');
 
-    logger.debug(`Crear factura: usuario_id=${usuario_id}, razon_social=${razon_social_cliente}, importe=${importe}`);
+    const { usuario_id, razon_social_cliente, documento_cliente, concepto, importe } = req.body;
+    logger.info(`1. Datos recibidos: usuario_id=${usuario_id}, cliente=${razon_social_cliente}, importe=${importe}`);
+
+    const db = getLocalDB();
+    logger.info('2. DB conectada');
 
     // Validar usuario existe
-    const usuario = db.prepare('SELECT * FROM usuarios WHERE id = ?').get(usuario_id);
+    let usuario;
+    try {
+      usuario = db.prepare('SELECT * FROM usuarios WHERE id = ?').get(usuario_id);
+      logger.info(`3. Usuario query OK: ${usuario ? 'encontrado' : 'NO encontrado'}`);
+    } catch (err) {
+      logger.error(`3. Error en query usuario: ${err.message}`);
+      return res.status(500).json({ error: `Usuario query: ${err.message}` });
+    }
+
     if (!usuario) {
       return res.status(400).json({ error: 'Cliente no encontrado' });
     }
-    logger.debug(`Usuario encontrado: ${usuario.nombre}`);
 
     // Validar campos obligatorios
     if (!razon_social_cliente || !concepto || !importe) {
       return res.status(400).json({ error: 'Faltan campos obligatorios' });
     }
+    logger.info('4. Campos obligatorios OK');
 
     // Validar importe
     const importeNum = parseFloat(importe);
     if (isNaN(importeNum) || importeNum <= 0) {
       return res.status(400).json({ error: 'Importe debe ser mayor a 0' });
     }
-
-    // Validar documento si está presente
-    if (documento_cliente && !validarDocumento(documento_cliente)) {
-      return res.status(400).json({ error: 'Documento inválido (CUIT, DNI o CF)' });
-    }
+    logger.info('5. Validaciones OK');
 
     // Generar número de factura
     const ahora = Math.floor(Date.now() / 1000);
@@ -648,15 +655,19 @@ router.post('/facturas/nuevo', async (req, res) => {
     logger.debug(`Creando factura: ${numero} para usuario ${usuario.id}`);
 
     // Guardar en BD primero (simple insert)
+    logger.info(`6. Insertando en BD: numero=${numero}, usuario=${usuario.id}, ahora=${ahora}`);
     try {
-      db.prepare(`
+      const stmt = db.prepare(`
         INSERT INTO facturas (usuario_id, numero_factura, creado_en, pdf_path)
         VALUES (?, ?, ?, ?)
-      `).run(usuario.id, numero, ahora, '');
-      logger.info(`✅ Factura guardada: ${numero}`);
+      `);
+      logger.info('6a. Statement preparado');
+
+      stmt.run(usuario.id, numero, ahora, '');
+      logger.info(`✅ 7. Factura guardada: ${numero}`);
     } catch (dbError) {
-      logger.error(`BD error: ${dbError.message}`);
-      return res.status(400).json({ error: `BD error: ${dbError.message}` });
+      logger.error(`❌ BD error: ${dbError.message}`);
+      return res.status(500).json({ error: `BD insert: ${dbError.message}` });
     }
 
     // Generar PDF en background (no bloquea respuesta)
@@ -684,11 +695,14 @@ router.post('/facturas/nuevo', async (req, res) => {
       logger.warn(`⚠️ PDF no se generó: ${pdfError.message}`);
     }
 
+    logger.info(`=== ✅ ÉXITO: Factura ${numero} creada ===`);
     res.json({ success: true, numero, mensaje: 'Factura creada' });
 
   } catch (error) {
-    logearError(error, 'Crear factura');
-    res.status(500).json({ error: error.message });
+    logger.error(`=== ❌ ERROR EN POST /facturas/nuevo ===`);
+    logger.error(`Error: ${error.message}`);
+    logger.error(`Stack: ${error.stack}`);
+    res.status(500).json({ error: error.message, stack: error.stack.substring(0, 200) });
   }
 });
 
