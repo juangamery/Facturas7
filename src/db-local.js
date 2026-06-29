@@ -8,18 +8,24 @@ const dbPath = path.join(__dirname, '../data.db');
 const require = createRequire(import.meta.url);
 
 let db = null;
+let initialized = false;
 
-async function initDB() {
+export function initLocalDB() {
+  if (initialized) return;
+
   try {
+    logger.info(`📦 Opening SQLite: ${dbPath}`);
     const Database = require('better-sqlite3');
     db = new Database(dbPath);
     db.pragma('journal_mode = WAL');
+    logger.info('✅ SQLite connected');
 
-    // Create tables if not exist
+    // Create tables
+    logger.info('Creating tables...');
     db.exec(`
       CREATE TABLE IF NOT EXISTS usuarios (
         id INTEGER PRIMARY KEY,
-        numero_telefono TEXT UNIQUE,
+        numero_telefono TEXT,
         nombre TEXT,
         plan TEXT DEFAULT 'basico',
         activo INTEGER DEFAULT 1,
@@ -35,29 +41,19 @@ async function initDB() {
         pdf_path TEXT
       );
     `);
+    logger.info('✅ Tables created');
+    initialized = true;
 
-    logger.info('✅ Local SQLite OK');
-    return db;
   } catch (error) {
-    logger.warn(`SQLite unavailable: ${error.message}`);
-    return null;
+    logger.error(`❌ SQLite init error: ${error.message}`);
+    throw error;
   }
 }
 
 export function getLocalDB() {
-  if (db) return db;
-  return createStubDB();
-}
-
-export function initLocalDB() {
-  return initDB();
-}
-
-function createStubDB() {
-  return {
-    prepare: (sql) => ({
-      get: () => ({ count: 0 }),
-      all: () => []
-    })
-  };
+  if (!db) {
+    logger.error('❌ SQLite not initialized - call initLocalDB() first');
+    throw new Error('SQLite not initialized');
+  }
+  return db;
 }
