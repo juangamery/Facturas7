@@ -81,7 +81,8 @@ export async function enviarPorEvolution(numeroWhatsapp, mensaje) {
       instance: EVOLUTION_INSTANCE
     };
 
-    const response = await axios.post(url, payload, {
+    // Intentar con X-API-Key si api-key falla
+    let response = await axios.post(url, payload, {
       headers: {
         'api-key': EVOLUTION_TOKEN,
         'Content-Type': 'application/json',
@@ -90,6 +91,34 @@ export async function enviarPorEvolution(numeroWhatsapp, mensaje) {
       timeout: 10000,
       validateStatus: () => true
     });
+
+    // Si falla api-key, intentar X-API-Key
+    if (response.status === 401) {
+      logger.info(`api-key falló (401), intentando X-API-Key`);
+      response = await axios.post(url, payload, {
+        headers: {
+          'X-API-Key': EVOLUTION_TOKEN,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        timeout: 10000,
+        validateStatus: () => true
+      });
+    }
+
+    // Si sigue fallando, intentar sin header (token en payload)
+    if (response.status === 401) {
+      logger.info(`X-API-Key falló (401), intentando token en payload`);
+      const payloadWithToken = { ...payload, api_key: EVOLUTION_TOKEN };
+      response = await axios.post(url, payloadWithToken, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        timeout: 10000,
+        validateStatus: () => true
+      });
+    }
 
     logger.info(`📊 Status: ${response.status}`);
     logger.info(`📄 Respuesta: ${JSON.stringify(response.data).substring(0, 200)}`);
