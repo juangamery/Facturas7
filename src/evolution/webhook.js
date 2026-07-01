@@ -69,52 +69,53 @@ export async function enviarPorEvolution(numeroWhatsapp, mensaje) {
 
     const number = numeroWhatsapp.includes('@') ? numeroWhatsapp : `${numeroWhatsapp}@s.whatsapp.net`;
 
-    const endpoints = [
-      `${EVOLUTION_API}/message/sendText/${EVOLUTION_INSTANCE}`,
-      `${EVOLUTION_API}/send/${EVOLUTION_INSTANCE}`,
-      `${EVOLUTION_API}/messages/send/${EVOLUTION_INSTANCE}`
+    // Endpoint correcto (retorna 401, no 404)
+    const url = `${EVOLUTION_API}/message/sendText/${EVOLUTION_INSTANCE}`;
+
+    // Payload correcto
+    const payload = { number, text: mensaje, instance: EVOLUTION_INSTANCE };
+
+    // Headers a probar
+    const headerVariants = [
+      { 'Authorization': `Bearer ${EVOLUTION_TOKEN}`, 'Content-Type': 'application/json' },
+      { 'X-API-Token': EVOLUTION_TOKEN, 'Content-Type': 'application/json' },
+      { 'Authorization': EVOLUTION_TOKEN, 'Content-Type': 'application/json' },
+      { 'api-key': EVOLUTION_TOKEN, 'Content-Type': 'application/json' }
     ];
 
-    const payloads = [
-      { number, text: mensaje, instance: EVOLUTION_INSTANCE },
-      { to: number, message: mensaje },
-      { phone: number, text: mensaje }
-    ];
-
-    logger.info(`📍 Probando 3 endpoints x 3 payloads = 9 combinaciones`);
+    logger.info(`📍 Probando 4 header variants en ${url}`);
     logger.info(`📱 Número: ${number}`);
 
     let response = null;
 
-    for (let i = 0; i < endpoints.length && !response; i++) {
-      for (let j = 0; j < payloads.length && !response; j++) {
-        try {
-          const url = endpoints[i];
-          const payload = payloads[j];
+    for (let i = 0; i < headerVariants.length && !response; i++) {
+      try {
+        const headers = headerVariants[i];
+        const headerName = Object.keys(headers)[0];
 
-          logger.info(`🔄 Intento ${i+1}.${j+1}: POST ${url.substring(url.lastIndexOf('/'))} con payload tipo ${j+1}`);
+        logger.info(`🔄 Intento ${i+1}: ${headerName}`);
 
-          response = await axios.post(url, payload, {
-            headers: { 'api-key': EVOLUTION_TOKEN, 'Content-Type': 'application/json' },
-            timeout: 5000,
-            validateStatus: () => true
-          });
+        response = await axios.post(url, payload, {
+          headers,
+          timeout: 5000,
+          validateStatus: () => true
+        });
 
-          if (response.status >= 200 && response.status < 300) {
-            logger.info(`✅ ÉXITO Status ${response.status}`);
-            return response.data;
-          }
+        logger.info(`Status ${response.status}`);
 
-          logger.info(`Status ${response.status}, continuando...`);
-          response = null;
-        } catch (err) {
-          logger.warn(`Intento ${i+1}.${j+1} error: ${err.message}`);
+        if (response.status >= 200 && response.status < 300) {
+          logger.info(`✅ ÉXITO con ${headerName}`);
+          return response.data;
         }
+
+        response = null;
+      } catch (err) {
+        logger.warn(`Intento ${i+1} error: ${err.message}`);
       }
     }
 
-    logger.error(`❌ Ninguna combinación funcionó`);
-    return { error: 'No endpoint worked' };
+    logger.error(`❌ Todos los headers fallaron`);
+    return { error: 'Auth failed with all headers' };
 
   } catch (error) {
     logger.error(`❌ Error fatal: ${error.message}`);
