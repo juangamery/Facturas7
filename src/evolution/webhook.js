@@ -67,72 +67,57 @@ export async function enviarPorEvolution(numeroWhatsapp, mensaje) {
   try {
     logger.info(`📤 Enviando a Evolution`);
 
-    // Formato del número
     const number = numeroWhatsapp.includes('@') ? numeroWhatsapp : `${numeroWhatsapp}@s.whatsapp.net`;
 
-    const url = `${EVOLUTION_API}/message/sendText/${EVOLUTION_INSTANCE}`;
-    logger.info(`📍 Endpoint: ${url}`);
+    const endpoints = [
+      `${EVOLUTION_API}/message/sendText/${EVOLUTION_INSTANCE}`,
+      `${EVOLUTION_API}/send/${EVOLUTION_INSTANCE}`,
+      `${EVOLUTION_API}/messages/send/${EVOLUTION_INSTANCE}`
+    ];
+
+    const payloads = [
+      { number, text: mensaje, instance: EVOLUTION_INSTANCE },
+      { to: number, message: mensaje },
+      { phone: number, text: mensaje }
+    ];
+
+    logger.info(`📍 Probando 3 endpoints x 3 payloads = 9 combinaciones`);
     logger.info(`📱 Número: ${number}`);
-    logger.info(`💬 Mensaje: ${mensaje.substring(0, 50)}`);
 
-    const payload = {
-      number,
-      text: mensaje,
-      instance: EVOLUTION_INSTANCE
-    };
+    let response = null;
 
-    // Intentar con X-API-Key si api-key falla
-    let response = await axios.post(url, payload, {
-      headers: {
-        'api-key': EVOLUTION_TOKEN,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
-      timeout: 10000,
-      validateStatus: () => true
-    });
+    for (let i = 0; i < endpoints.length && !response; i++) {
+      for (let j = 0; j < payloads.length && !response; j++) {
+        try {
+          const url = endpoints[i];
+          const payload = payloads[j];
 
-    // Si falla api-key, intentar X-API-Key
-    if (response.status === 401) {
-      logger.info(`api-key falló (401), intentando X-API-Key`);
-      response = await axios.post(url, payload, {
-        headers: {
-          'X-API-Key': EVOLUTION_TOKEN,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        timeout: 10000,
-        validateStatus: () => true
-      });
+          logger.info(`🔄 Intento ${i+1}.${j+1}: POST ${url.substring(url.lastIndexOf('/'))} con payload tipo ${j+1}`);
+
+          response = await axios.post(url, payload, {
+            headers: { 'api-key': EVOLUTION_TOKEN, 'Content-Type': 'application/json' },
+            timeout: 5000,
+            validateStatus: () => true
+          });
+
+          if (response.status >= 200 && response.status < 300) {
+            logger.info(`✅ ÉXITO Status ${response.status}`);
+            return response.data;
+          }
+
+          logger.info(`Status ${response.status}, continuando...`);
+          response = null;
+        } catch (err) {
+          logger.warn(`Intento ${i+1}.${j+1} error: ${err.message}`);
+        }
+      }
     }
 
-    // Si sigue fallando, intentar sin header (token en payload)
-    if (response.status === 401) {
-      logger.info(`X-API-Key falló (401), intentando token en payload`);
-      const payloadWithToken = { ...payload, api_key: EVOLUTION_TOKEN };
-      response = await axios.post(url, payloadWithToken, {
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        timeout: 10000,
-        validateStatus: () => true
-      });
-    }
-
-    logger.info(`📊 Status: ${response.status}`);
-    logger.info(`📄 Respuesta: ${JSON.stringify(response.data).substring(0, 200)}`);
-
-    if (response.status >= 200 && response.status < 300) {
-      logger.info(`✅ Enviado OK`);
-    } else {
-      logger.warn(`⚠️ Status ${response.status}, pero sin error crítoco`);
-    }
-
-    return response.data;
+    logger.error(`❌ Ninguna combinación funcionó`);
+    return { error: 'No endpoint worked' };
 
   } catch (error) {
-    logger.error(`❌ Error: ${error.message}`);
+    logger.error(`❌ Error fatal: ${error.message}`);
     throw error;
   }
 }
