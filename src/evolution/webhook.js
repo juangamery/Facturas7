@@ -65,39 +65,52 @@ export async function handleEvolutionWebhook(req, res) {
 
 export async function enviarPorEvolution(numeroWhatsapp, mensaje) {
   try {
-    logger.info(`📤 Enviando a Evolution: API=${EVOLUTION_API}, instance=${EVOLUTION_INSTANCE}`);
+    logger.info(`📤 Enviando a Evolution`);
 
-    const url = `${EVOLUTION_API}/message/sendText/${EVOLUTION_INSTANCE}`;
-    logger.info(`URL: ${url}`);
+    // Formato del número
+    const number = numeroWhatsapp.includes('@') ? numeroWhatsapp : `${numeroWhatsapp}@s.whatsapp.net`;
 
-    // Asegurar formato correcto del número
-    const numberFormatted = numeroWhatsapp.includes('@') ? numeroWhatsapp : `${numeroWhatsapp}@s.whatsapp.net`;
+    // Probar múltiples endpoints
+    const endpoints = [
+      `${EVOLUTION_API}/message/sendText/${EVOLUTION_INSTANCE}`,
+      `${EVOLUTION_API}/send/text/${EVOLUTION_INSTANCE}`,
+      `${EVOLUTION_API}/api/send/text/${EVOLUTION_INSTANCE}`
+    ];
+
+    const url = endpoints[0];
+    logger.info(`📍 Endpoint: ${url}`);
+    logger.info(`📱 Número: ${number}`);
+    logger.info(`💬 Mensaje: ${mensaje.substring(0, 50)}`);
 
     const payload = {
-      number: numberFormatted,
-      text: mensaje
+      number,
+      text: mensaje,
+      instance: EVOLUTION_INSTANCE
     };
-
-    logger.debug(`Payload: ${JSON.stringify(payload)}`);
-    logger.debug(`Token: ${EVOLUTION_TOKEN}`);
 
     const response = await axios.post(url, payload, {
       headers: {
         'Authorization': `Bearer ${EVOLUTION_TOKEN}`,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
       },
-      validateStatus: () => true // Permitir cualquier status para ver respuesta completa
+      timeout: 10000,
+      validateStatus: () => true
     });
 
-    logger.info(`✉️ Enviado a ${numeroWhatsapp}`);
+    logger.info(`📊 Status: ${response.status}`);
+    logger.info(`📄 Respuesta: ${JSON.stringify(response.data).substring(0, 200)}`);
+
+    if (response.status >= 200 && response.status < 300) {
+      logger.info(`✅ Enviado OK`);
+    } else {
+      logger.warn(`⚠️ Status ${response.status}, pero sin error crítoco`);
+    }
+
     return response.data;
 
   } catch (error) {
-    logger.error(`❌ Evolution error: ${error.message}`);
-    if (error.response) {
-      logger.error(`Response status: ${error.response.status}`);
-      logger.error(`Response data: ${JSON.stringify(error.response.data)}`);
-    }
+    logger.error(`❌ Error: ${error.message}`);
     throw error;
   }
 }
