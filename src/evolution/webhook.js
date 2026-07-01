@@ -83,7 +83,7 @@ export async function enviarPorEvolution(numeroWhatsapp, mensaje) {
 
     const response = await axios.post(url, payload, {
       headers: {
-        'Authorization': `Bearer ${EVOLUTION_TOKEN}`,
+        'Authorization': `${EVOLUTION_TOKEN}`,
         'Content-Type': 'application/json',
         'Accept': 'application/json'
       },
