@@ -24,6 +24,7 @@ import webhookWhatsApp from './bot/webhook.js';
 import adminRoutes from './admin/routes.js';
 import { handleMercadoPagoWebhook } from './mercadopago/webhook.js';
 import { handleEvolutionWebhook } from './evolution/webhook.js';
+import { handleZavuWebhook } from './zavu/webhook.js';
 import { inicializarMailer } from './email/mailer.js';
 import { inicializarReceiver } from './email/receiver.js';
 
@@ -65,6 +66,10 @@ app.post('/webhooks/whatsapp', webhookWhatsApp);
 // Webhook de Evolution API (POST /webhooks/evolution)
 // Evolution manda acá todos los mensajes WhatsApp
 app.post('/webhooks/evolution', handleEvolutionWebhook);
+
+// Webhook de Zavu API (POST /webhooks/zavu)
+// Zavu manda acá todos los mensajes (WhatsApp, SMS, Email, etc)
+app.post('/webhooks/zavu', handleZavuWebhook);
 
 // Webhook de Mercado Pago (POST /webhooks/mercadopago)
 // MP manda acá eventos de pagos aprobados, rechazados, etc
@@ -131,6 +136,8 @@ async function iniciar() {
       logger.info(`🚀 Servidor corriendo en ${BASE_URL}`);
       logger.info(`📊 Panel admin: ${BASE_URL}/admin/login`);
       logger.info(`⚡ Webhook Meta: ${BASE_URL}/webhooks/whatsapp`);
+      logger.info(`📨 Webhook Evolution: ${BASE_URL}/webhooks/evolution`);
+      logger.info(`📱 Webhook Zavu: ${BASE_URL}/webhooks/zavu`);
       logger.info(`💳 Webhook MP: ${BASE_URL}/webhooks/mercadopago`);
       logger.info(`📈 Health check: ${BASE_URL}/health`);
     });
