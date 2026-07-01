@@ -19,19 +19,16 @@ export async function handleEvolutionWebhook(req, res) {
     }
 
     const message = data.message;
-    logger.debug(`Message keys: ${Object.keys(message).join(', ')}`);
-    logger.debug(`Message.key: ${JSON.stringify(message.key)}`);
+    const key = data.key;
 
-    // Intentar extraer número - múltiples formatos
-    let numeroWhatsapp = message.key?.remoteJid?.replace('@s.whatsapp.net', '')
-                       || message.remoteJid?.replace('@s.whatsapp.net', '')
-                       || data.remoteJid?.replace('@s.whatsapp.net', '')
-                       || message.from?.replace('@s.whatsapp.net', '');
+    // Número está en data.key.remoteJid (estructura Evolution/Baileys)
+    let numeroWhatsapp = key?.remoteJid?.replace('@s.whatsapp.net', '')
+                      || key?.remoteJidAlt?.replace('@s.whatsapp.net', '');
 
-    const messageId = message.key?.id || data.id;
+    const messageId = key?.id;
     const messageType = Object.keys(message)[Object.keys(message).length - 1];
 
-    logger.info(`Extrayendo: remoteJid=${numeroWhatsapp}, type=${messageType}`);
+    logger.info(`✅ remoteJid=${numeroWhatsapp}, type=${messageType}`);
 
     if (!numeroWhatsapp) {
       logger.warn('Sin número WhatsApp - payload completo:');
