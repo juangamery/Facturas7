@@ -70,8 +70,11 @@ export async function enviarPorEvolution(numeroWhatsapp, mensaje) {
     const url = `${EVOLUTION_API}/message/sendText/${EVOLUTION_INSTANCE}`;
     logger.info(`URL: ${url}`);
 
+    // Asegurar formato correcto del número
+    const numberFormatted = numeroWhatsapp.includes('@') ? numeroWhatsapp : `${numeroWhatsapp}@s.whatsapp.net`;
+
     const payload = {
-      number: numeroWhatsapp,
+      number: numberFormatted,
       text: mensaje
     };
 
