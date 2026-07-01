@@ -159,10 +159,10 @@ function resetearFacturasDelMes() {
 
   setTimeout(() => {
     try {
-      // Resetear contador de facturas para TODOS los usuarios
-      const db = getDB();
-      db.prepare('UPDATE usuarios SET facturas_mes_actual = 0').run();
-      logger.info('✅ Contador de facturas reseteado para nuevo mes');
+      logger.info('⏰ Scheduled reset: facturas_mes_actual (TODO: implement async Supabase)');
+      // TODO: Implementar con async Supabase update
+      // const db = getDB();
+      // await db.from('usuarios').update({ facturas_mes_actual: 0 }).eq('activo', true);
 
       // Volver a programar para el próximo mes
       resetearFacturasDelMes();
