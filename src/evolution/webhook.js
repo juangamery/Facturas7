@@ -9,6 +9,7 @@ const EVOLUTION_INSTANCE = process.env.EVOLUTION_INSTANCE;
 export async function handleEvolutionWebhook(req, res) {
   try {
     logger.info('📨 Webhook Evolution recibido');
+    logger.debug(`Payload: ${JSON.stringify(req.body).substring(0, 200)}`);
 
     const { data } = req.body;
 
@@ -18,12 +19,23 @@ export async function handleEvolutionWebhook(req, res) {
     }
 
     const message = data.message;
-    const numeroWhatsapp = message.key?.remoteJid?.replace('@s.whatsapp.net', '');
-    const messageId = message.key?.id;
+    logger.debug(`Message keys: ${Object.keys(message).join(', ')}`);
+    logger.debug(`Message.key: ${JSON.stringify(message.key)}`);
+
+    // Intentar extraer número - múltiples formatos
+    let numeroWhatsapp = message.key?.remoteJid?.replace('@s.whatsapp.net', '')
+                       || message.remoteJid?.replace('@s.whatsapp.net', '')
+                       || data.remoteJid?.replace('@s.whatsapp.net', '')
+                       || message.from?.replace('@s.whatsapp.net', '');
+
+    const messageId = message.key?.id || data.id;
     const messageType = Object.keys(message)[Object.keys(message).length - 1];
 
+    logger.info(`Extrayendo: remoteJid=${numeroWhatsapp}, type=${messageType}`);
+
     if (!numeroWhatsapp) {
-      logger.warn('Sin número WhatsApp');
+      logger.warn('Sin número WhatsApp - payload completo:');
+      logger.warn(JSON.stringify(req.body).substring(0, 500));
       return res.json({ success: true });
     }
 
