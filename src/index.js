@@ -116,15 +116,15 @@ async function iniciar() {
     // 4. Avisar a clientes vencidos (cada día a las 10:00 AM)
     avisarClientesVencidos();
 
-    // 5. Email service (Nodemailer + IMAP)
-    try {
-      inicializarMailer();
-      logger.info('Inicializando Email Receiver...');
-      inicializarReceiver();
-      logger.info('Email service listo ✅');
-    } catch (error) {
-      logger.warn(`Email service no disponible: ${error.message}`);
-    }
+    // 5. Email service (Nodemailer + IMAP) - DESACTIVADO
+    // try {
+    //   inicializarMailer();
+    //   logger.info('Inicializando Email Receiver...');
+    //   inicializarReceiver();
+    //   logger.info('Email service listo ✅');
+    // } catch (error) {
+    //   logger.warn(`Email service no disponible: ${error.message}`);
+    // }
 
     // 6. Iniciar servidor Express
     app.listen(PORT, () => {
