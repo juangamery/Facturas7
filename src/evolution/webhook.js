@@ -1,6 +1,5 @@
 import axios from 'axios';
 import { logger } from '../logger.js';
-import { getDB } from '../db.js';
 import { procesarMensaje } from './conversacion.js';
 
 const EVOLUTION_API = process.env.EVOLUTION_API_URL;
@@ -9,33 +8,24 @@ const EVOLUTION_INSTANCE = process.env.EVOLUTION_INSTANCE;
 
 export async function handleEvolutionWebhook(req, res) {
   try {
+    logger.info('📨 Webhook Evolution recibido');
+
     const { data } = req.body;
 
     if (!data || !data.message) {
+      logger.debug('Sin data.message, ignorar');
       return res.json({ success: true });
     }
 
     const message = data.message;
     const numeroWhatsapp = message.key?.remoteJid?.replace('@s.whatsapp.net', '');
     const messageId = message.key?.id;
-    const timestamp = message.messageTimestamp;
     const messageType = Object.keys(message)[Object.keys(message).length - 1];
 
     if (!numeroWhatsapp) {
+      logger.warn('Sin número WhatsApp');
       return res.json({ success: true });
     }
-
-    const db = getDB();
-    const procesado = db.prepare('SELECT * FROM mensajes_procesados WHERE message_id = ?').get(messageId);
-
-    if (procesado) {
-      return res.json({ success: true });
-    }
-
-    db.prepare('INSERT INTO mensajes_procesados (message_id, procesado_en) VALUES (?, ?)').run(
-      messageId,
-      Math.floor(Date.now() / 1000)
-    );
 
     let contenido = '';
     let tipo = 'texto';
@@ -59,7 +49,7 @@ export async function handleEvolutionWebhook(req, res) {
     res.json({ success: true });
 
   } catch (error) {
-    logger.error(`Error webhook Evolution: ${error.message}`);
+    logger.error(`❌ Webhook Evolution error: ${error.message}`);
     res.status(500).json({ error: error.message });
   }
 }
