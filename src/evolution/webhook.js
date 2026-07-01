@@ -65,27 +65,34 @@ export async function handleEvolutionWebhook(req, res) {
 
 export async function enviarPorEvolution(numeroWhatsapp, mensaje) {
   try {
+    logger.info(`📤 Enviando a Evolution: API=${EVOLUTION_API}, instance=${EVOLUTION_INSTANCE}`);
+
     const url = `${EVOLUTION_API}/message/sendText/${EVOLUTION_INSTANCE}`;
+    logger.info(`URL: ${url}`);
 
-    const response = await axios.post(
-      url,
-      {
-        number: numeroWhatsapp,
-        text: mensaje
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${EVOLUTION_TOKEN}`,
-          'Content-Type': 'application/json'
-        }
+    const payload = {
+      number: numeroWhatsapp,
+      text: mensaje
+    };
+
+    logger.debug(`Payload: ${JSON.stringify(payload)}`);
+
+    const response = await axios.post(url, payload, {
+      headers: {
+        Authorization: `Bearer ${EVOLUTION_TOKEN}`,
+        'Content-Type': 'application/json'
       }
-    );
+    });
 
-    logger.info(`✉️ Mensaje enviado a ${numeroWhatsapp}`);
+    logger.info(`✉️ Enviado a ${numeroWhatsapp}`);
     return response.data;
 
   } catch (error) {
-    logger.error(`Error enviando por Evolution: ${error.message}`);
+    logger.error(`❌ Evolution error: ${error.message}`);
+    if (error.response) {
+      logger.error(`Response status: ${error.response.status}`);
+      logger.error(`Response data: ${JSON.stringify(error.response.data)}`);
+    }
     throw error;
   }
 }
