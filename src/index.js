@@ -109,9 +109,9 @@ async function iniciar() {
     setInterval(limpiarDatos, 60 * 60 * 1000);
     logger.info('Configurada limpieza horaria ✅');
 
-    // 3. Resetear contador de facturas del mes (día 1 de cada mes a las 00:00)
-    // Esto permite que cada cliente tenga límite de facturas por mes
-    resetearFacturasDelMes();
+    // 3. Resetear contador de facturas del mes (DESACTIVADO - loop infinito)
+    // TODO: Implementar correctamente con async Supabase
+    // resetearFacturasDelMes();
 
     // 4. Avisar a clientes vencidos (cada día a las 10:00 AM)
     avisarClientesVencidos();
