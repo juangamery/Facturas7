@@ -76,12 +76,14 @@ export async function enviarPorEvolution(numeroWhatsapp, mensaje) {
     };
 
     logger.debug(`Payload: ${JSON.stringify(payload)}`);
+    logger.debug(`Token: ${EVOLUTION_TOKEN}`);
 
     const response = await axios.post(url, payload, {
       headers: {
-        Authorization: `Bearer ${EVOLUTION_TOKEN}`,
+        'Authorization': `Bearer ${EVOLUTION_TOKEN}`,
         'Content-Type': 'application/json'
-      }
+      },
+      validateStatus: () => true // Permitir cualquier status para ver respuesta completa
     });
 
     logger.info(`✉️ Enviado a ${numeroWhatsapp}`);
