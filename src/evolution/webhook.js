@@ -70,14 +70,7 @@ export async function enviarPorEvolution(numeroWhatsapp, mensaje) {
     // Formato del número
     const number = numeroWhatsapp.includes('@') ? numeroWhatsapp : `${numeroWhatsapp}@s.whatsapp.net`;
 
-    // Probar múltiples endpoints
-    const endpoints = [
-      `${EVOLUTION_API}/message/sendText/${EVOLUTION_INSTANCE}`,
-      `${EVOLUTION_API}/send/text/${EVOLUTION_INSTANCE}`,
-      `${EVOLUTION_API}/api/send/text/${EVOLUTION_INSTANCE}`
-    ];
-
-    const url = endpoints[0];
+    const url = `${EVOLUTION_API}/send/${EVOLUTION_INSTANCE}`;
     logger.info(`📍 Endpoint: ${url}`);
     logger.info(`📱 Número: ${number}`);
     logger.info(`💬 Mensaje: ${mensaje.substring(0, 50)}`);
