@@ -12,8 +12,11 @@ const WAPPFLY_BASE_URL = 'https://wappfly.com/api';
 const POLL_INTERVAL = 5000;
 
 // ==========================================
-// VERIFICAR CONFIGURACIÓN AL ARRANCAR
+// DEBUG: LOG WAPPFLY_TOKEN VALUE
 // ==========================================
+
+logger.info(`DEBUG: WAPPFLY_TOKEN length=${WAPPFLY_TOKEN ? WAPPFLY_TOKEN.length : 'undefined'}`);
+logger.info(`DEBUG: WAPPFLY_TOKEN first 8=${WAPPFLY_TOKEN ? WAPPFLY_TOKEN.substring(0, 8) : 'UNDEFINED'}`);
 
 if (!WAPPFLY_TOKEN || WAPPFLY_TOKEN === 'tu-token-de-wappfly') {
   logger.error('❌ WAPPFLY_TOKEN no configurado o es placeholder');
