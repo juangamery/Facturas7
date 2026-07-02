@@ -64,24 +64,31 @@ async function obtenerMensajesWappfly() {
       return;
     }
 
-    const datos = await response.json();
-    const mensajes = datos.data || datos.messages || [];
+    const mensajes = await response.json();
 
-    if (mensajes.length === 0) return;
+    if (!Array.isArray(mensajes) || mensajes.length === 0) return;
 
     logger.debug(`📥 ${mensajes.length} mensajes en Wappfly`);
 
     for (const msg of mensajes) {
-      const messageId = msg.messageId || msg.id || msg.wamid;
+      // Solo procesar mensajes INBOUND (from_me = 0)
+      if (msg.from_me === 1) continue;
+
+      const messageId = msg.msg_id;
+      if (!messageId) continue;
 
       // Deduplicar
       if (yaProcesado(messageId)) continue;
       marcarComoProcesado(messageId);
 
-      logger.info(`📨 Mensaje Wappfly: de ${msg.from} tipo=${msg.type} id=${messageId}`);
+      // Extraer número sin @s.whatsapp.net
+      const numeroCompleto = msg.sender_jid || msg.chat_jid || '';
+      const numero = numeroCompleto.split('@')[0];
+
+      logger.info(`📨 Mensaje Wappfly: de ${numero} tipo=${msg.type} id=${messageId}`);
 
       // Procesar en background
-      procesarMensajeWappfly(msg.from, msg.type, msg).catch(error => {
+      procesarMensajeWappfly(numero, msg.type, msg).catch(error => {
         logearError(error, `Procesamiento polling ${messageId}`);
       });
     }
@@ -99,21 +106,23 @@ async function procesarMensajeWappfly(numero, tipo, data) {
   try {
     let mensaje = {
       from: numero,
-      id: data.messageId,
+      id: data.msg_id,
       type: tipo,
-      timestamp: data.timestamp
+      timestamp: Math.floor(new Date(data.timestamp).getTime() / 1000)
     };
 
     // Adaptar estructura según tipo (compatible con bot.js)
     if (tipo === 'text') {
-      mensaje.text = { body: data.text || '' };
+      mensaje.text = { body: data.body || '' };
       logger.info(`✅ Procesando texto de ${numero}`);
     } else if (tipo === 'image') {
-      mensaje.image = { id: data.mediaUrl };
-      logger.info(`✅ Procesando imagen de ${numero}`);
+      // /messages/recent no incluye URL de media, solo tipo
+      // Necesitaría endpoint adicional para descargar
+      logger.warn(`Imagen recibida pero sin URL en /messages/recent`);
+      return;
     } else if (tipo === 'audio') {
-      mensaje.audio = { id: data.mediaUrl };
-      logger.info(`✅ Procesando audio de ${numero}`);
+      logger.warn(`Audio recibido pero sin URL en /messages/recent`);
+      return;
     } else {
       logger.warn(`Tipo desconocido: ${tipo}`);
       return;
