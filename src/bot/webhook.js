@@ -65,8 +65,12 @@ async function obtenerMensajesWappfly() {
     }
 
     const mensajes = await response.json();
+    logger.debug(`📥 Wappfly respondió: ${Array.isArray(mensajes) ? mensajes.length : '?'} mensajes`);
 
-    if (!Array.isArray(mensajes) || mensajes.length === 0) return;
+    if (!Array.isArray(mensajes) || mensajes.length === 0) {
+      logger.debug(`⏳ Sin mensajes nuevos`);
+      return;
+    }
 
     logger.debug(`📥 ${mensajes.length} mensajes en Wappfly`);
 
