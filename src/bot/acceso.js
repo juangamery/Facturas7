@@ -14,7 +14,7 @@ import { MENSAJES } from './plantillas.js';
 export async function verificarAcceso(numeroDeTelefono) {
   // Resultado: { permitido: boolean, razon: string, usuario?: object }
 
-  const usuario = obtenerUsuario(numeroDeTelefono);
+  const usuario = await obtenerUsuario(numeroDeTelefono);
 
   // Usuario no registrado
   if (!usuario) {

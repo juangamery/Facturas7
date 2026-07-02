@@ -87,9 +87,12 @@ export function iniciarPolling() {
   logger.info(`✅ Polling configurado cada ${POLL_INTERVAL / 1000}s`);
 }
 
+// En el primer poll: sembramos los mensajes existentes como "ya procesados"
+// SIN responder. Evita replay de mensajes viejos y gasto de quota.
+let seedListo = false;
+
 async function ejecutarPoll() {
   try {
-    // Log de ping para verificar que se ejecuta
     logger.debug(`🔵 Polling... (${new Date().toISOString()})`);
 
     if (!WAPPFLY_TOKEN) {
@@ -124,30 +127,44 @@ async function ejecutarPoll() {
 
     if (!Array.isArray(mensajes) || count === 0) {
       logger.debug(`⏳ Sin mensajes nuevos`);
+      seedListo = true;
       return;
     }
 
-    // Procesar mensajes
+    // SEED: primer poll marca mensajes existentes como procesados, sin responder
+    if (!seedListo) {
+      let sembrados = 0;
+      for (const msg of mensajes) {
+        if (msg.msg_id && !(await yaProcesado(msg.msg_id))) {
+          await marcarComoProcesado(msg.msg_id);
+          sembrados++;
+        }
+      }
+      seedListo = true;
+      logger.info(`🌱 Seed inicial: ${sembrados} mensajes viejos marcados (sin responder)`);
+      return;
+    }
+
+    // Procesar mensajes NUEVOS
     for (const msg of mensajes) {
       if (msg.from_me === 1) continue;  // Skip outbound
       if (!msg.msg_id) continue;
 
-      if (yaProcesado(msg.msg_id)) continue;
-      marcarComoProcesado(msg.msg_id);
+      // BUGFIX: yaProcesado/marcarComoProcesado son async → hay que await
+      if (await yaProcesado(msg.msg_id)) continue;
+      await marcarComoProcesado(msg.msg_id);
 
-      // Solo chats directos, no grupos
-      const numeroCompleto = msg.sender_jid || msg.chat_jid || '';
-      if (!numeroCompleto.endsWith('@s.whatsapp.net')) {
-        logger.debug(`Ignorado (grupo): ${numeroCompleto}`);
+      // JID completo del chat — sirve tanto @s.whatsapp.net como @lid.
+      // Se usa tal cual para responder (no reformatear).
+      const jid = msg.chat_jid || msg.sender_jid || '';
+      if (!jid) {
+        logger.warn(`Mensaje sin jid: ${msg.msg_id}`);
         continue;
       }
 
-      const numero = numeroCompleto.split('@')[0];
-      if (!numero) continue;
+      logger.info(`📨 Mensaje: de ${jid} tipo=${msg.type} id=${msg.msg_id} body="${(msg.body || '').substring(0, 40)}"`);
 
-      logger.info(`📨 Mensaje: de ${numero} tipo=${msg.type} id=${msg.msg_id}`);
-
-      procesarMensajeWappfly(numero, msg.type, msg).catch(error => {
+      procesarMensajeWappfly(jid, msg.type, msg).catch(error => {
         logearError(error, `Poll procesamiento ${msg.msg_id}`);
       });
     }

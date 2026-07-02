@@ -11,9 +11,14 @@ import https from 'https';
 const WAPPFLY_TOKEN = process.env.WAPPFLY_TOKEN;
 const WAPPFLY_API_BASE = 'https://wappfly.com/api';
 
-// Normalizar número a formato JID
+// Normalizar a formato JID.
+// Si ya viene con @ (ej: 161027048095914@lid o 549...@s.whatsapp.net),
+// se usa tal cual — así respondemos al mismo chat del que vino el mensaje.
 function formatearJID(numero) {
-  const limpio = numero.replace(/\D/g, '');
+  if (typeof numero === 'string' && numero.includes('@')) {
+    return numero;
+  }
+  const limpio = String(numero).replace(/\D/g, '');
   return `${limpio}@s.whatsapp.net`;
 }
 
