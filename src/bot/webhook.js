@@ -48,19 +48,78 @@ export default async function webhookHandler(req, res) {
     });
   }
 
-  // POST: webhooks de Wappfly
+  // POST: webhook real de Wappfly (event: messages.received)
   if (req.method === 'POST') {
+    // Responder 2xx SIEMPRE y rápido (Wappfly no reintenta)
     res.status(200).json({ received: true });
-    const { event, data } = req.body;
-    if (event === 'message' && data) {
-      procesarMensajeWappfly(data.from, data.type, data).catch(error => {
-        logearError(error, 'Webhook POST');
-      });
-    }
+    procesarWebhookWappfly(req.body).catch(error => {
+      logearError(error, 'Webhook POST');
+    });
     return;
   }
 
   res.status(405).json({ error: 'Método no permitido' });
+}
+
+// ==========================================
+// WEBHOOK REAL DE WAPPFLY (messages.received)
+// ==========================================
+// El webhook trae el NÚMERO REAL del remitente (senderPn / cleanedSenderPn),
+// a diferencia del polling que solo da el @lid (no entregable).
+
+async function procesarWebhookWappfly(body) {
+  try {
+    const { event, data } = body || {};
+    if (event !== 'messages.received' || !data?.messages) {
+      logger.debug(`Webhook evento ignorado: ${event}`);
+      return;
+    }
+
+    const m = data.messages;
+    const key = m.key || {};
+
+    // Ignorar mensajes propios
+    if (key.fromMe) return;
+
+    // LOG completo del key para diagnosticar el JID real
+    logger.info(`🌐 Webhook key: senderPn=${key.senderPn} cleanedSenderPn=${key.cleanedSenderPn} senderLid=${key.senderLid} remoteJid=${key.remoteJid} addr=${key.addressingMode}`);
+
+    // Elegir el JID ENTREGABLE: preferir el número real (@s.whatsapp.net)
+    let jid = key.senderPn
+      || (key.cleanedSenderPn ? `${key.cleanedSenderPn}@s.whatsapp.net` : null)
+      || key.remoteJid;
+
+    if (!jid) {
+      logger.warn(`Webhook sin JID entregable`);
+      return;
+    }
+
+    const messageId = key.id;
+    if (!messageId) return;
+
+    // Dedup (memoria + DB) — comparte con el polling
+    if (procesadosMem.has(messageId)) return;
+    procesadosMem.add(messageId);
+    if (await yaProcesado(messageId)) return;
+    await marcarComoProcesado(messageId);
+
+    // Extraer texto
+    const bodyTexto = m.messageBody || m.message?.conversation || '';
+
+    logger.info(`📨 Webhook mensaje: de ${jid} body="${bodyTexto.substring(0, 40)}"`);
+
+    // Procesar como texto (compatible con bot.js)
+    await procesarMensaje({
+      from: jid,
+      id: messageId,
+      type: 'text',
+      timestamp: m.messageTimestamp || Math.floor(Date.now() / 1000),
+      text: { body: bodyTexto }
+    });
+
+  } catch (error) {
+    logearError(error, 'procesarWebhookWappfly');
+  }
 }
 
 // ==========================================

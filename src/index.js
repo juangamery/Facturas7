@@ -121,8 +121,10 @@ async function iniciar() {
     //   logger.warn(`Email service no disponible: ${error.message}`);
     // }
 
-    // 6. Iniciar polling de Wappfly
-    iniciarPolling();
+    // 6. Wappfly: usamos el WEBHOOK real (trae número real del remitente),
+    //    no el polling (que solo da @lid, no entregable).
+    //    Polling desactivado para no gastar quota respondiendo a @lid.
+    // iniciarPolling();
 
     // 7. Iniciar servidor Express
     app.listen(PORT, () => {
