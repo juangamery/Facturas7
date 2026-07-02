@@ -4,10 +4,10 @@ Plataforma de facturación electrónica para Argentina con WhatsApp, Afip CAE y 
 
 ## Arquitectura
 
-- **Backend:** Node.js + Express + SQLite
+- **Backend:** Node.js + Express + Supabase
 - **Frontend:** React 18 + Vite + Bootstrap 5
-- **WhatsApp:** Evolution API
-- **Chat Admin:** Chatwoot
+- **WhatsApp:** Wappfly API (QR code)
+- **Chat Admin:** Chatwoot (legacy)
 - **Facturación:** Afip CAE + pdfkit
 - **Pago:** Mercado Pago suscripciones
 
@@ -30,7 +30,7 @@ Plataforma de facturación electrónica para Argentina con WhatsApp, Afip CAE y 
 - Gestionar suscripciones
 
 ✅ **Integraciones**
-- Evolution API (WhatsApp)
+- Wappfly (WhatsApp - QR code)
 - Chatwoot (soporte)
 - Afip (CAE)
 - Mercado Pago (suscripción)
@@ -43,31 +43,43 @@ cd /Users/carlosfedericogunther/Downloads/Claudio/Facturas7
 ```
 
 ### 2. Variables entorno (.env)
+
+Ver `.env.example` para lista completa. Mínimas requeridas:
+
 ```bash
-# Evolution API + Chatwoot
-EVOLUTION_API_URL=https://evo.lab7.com.ar
-EVOLUTION_API_TOKEN=1FAECBD2909F-48D4-AA03-B5287BA7CF68
-EVOLUTION_INSTANCE=Facturas-WhatsApp
-CHATWOOT_URL=https://chat.lab7.com.ar
-CHATWOOT_WEBHOOK_SECRET=9Hnte4Jkk4M1c5ozoMCUfHtL
+# ===== OBLIGATORIO =====
+# Wappfly (obtener en https://wappfly.com)
+WAPPFLY_TOKEN=tu-token-de-wappfly
 
-# Mercado Pago
-MP_ACCESS_TOKEN=tu_access_token
-MP_PLAN_ID=tu_plan_id
-
-# Afip (después configurar)
-AFIPSDK_TOKEN=
-AFIPSDK_ENTORNO=homologacion
+# Supabase
+SUPABASE_URL=https://tu-supabase-url.supabase.co
+SUPABASE_KEY=tu-supabase-key
 
 # Admin
 ADMIN_USER=admin
 ADMIN_PASSWORD=admin123
-SESSION_SECRET=tu_secret_aqui
+SESSION_SECRET=tu-secret-aqui
 
 # App
-PORT=3000
-BASE_URL=http://localhost:3000
-NODE_ENV=development
+PORT=3001
+BASE_URL=http://localhost:3001
+```
+
+Opcional:
+```bash
+# Mercado Pago (suscripciones)
+MP_ACCESS_TOKEN=
+MP_PLAN_BASICO_ID=
+MP_PLAN_PREMIUM_ID=
+
+# IA
+GROQ_API_KEY=
+ANTHROPIC_API_KEY=
+
+# Email
+MAIL_HOST=
+MAIL_USER=
+MAIL_PASS=
 ```
 
 ### 3. Instalar dependencias
@@ -144,8 +156,8 @@ Usuario: "SÍ"
 ## Rutas API
 
 ### Públicas
-- `POST /webhooks/evolution` - Recibe mensajes WhatsApp
-- `POST /webhooks/chatwoot` - Webhook Chatwoot
+- `POST /webhooks/whatsapp` - Recibe mensajes Wappfly
+- `POST /webhooks/chatwoot` - Webhook Chatwoot (legacy)
 - `GET /health` - Health check
 
 ### Admin (requieren login)
@@ -163,24 +175,23 @@ Usuario: "SÍ"
 ```
 /Facturas7
 ├── src/
-│   ├── admin/        # Panel admin (routes, auth, views)
-│   ├── evolution/    # WhatsApp (webhook, conversación, send)
-│   ├── afip/         # Afip CAE
-│   ├── mercadopago/  # Mercado Pago
-│   ├── facturacion/  # PDF, validaciones
-│   ├── db.js         # SQLite
-│   ├── logger.js     # Logging
-│   └── index.js      # Entry point
-├── frontend/
-│   ├── src/
-│   │   ├── components/  # React components
-│   │   ├── App.jsx
-│   │   └── main.jsx
-│   ├── vite.config.js
-│   └── package.json
-├── data/             # SQLite DB
-├── public/           # Static files
-└── .env              # Variables entorno
+│   ├── admin/          # Panel admin (routes, auth, views)
+│   ├── bot/            # Bot logic (webhook, conversación)
+│   ├── whatsapp/       # Wappfly integration (mensajes.js)
+│   ├── evolution/      # Evolution (legacy)
+│   ├── chatwoot/       # Chatwoot integration
+│   ├── afip/           # Afip CAE
+│   ├── mercadopago/    # Mercado Pago
+│   ├── facturacion/    # PDF, validaciones
+│   ├── ia/             # IA (vision, audio)
+│   ├── db.js           # Supabase + SQLite
+│   ├── logger.js       # Logging
+│   └── index.js        # Entry point
+├── media/              # Downloaded media (images, audio)
+├── public/             # Static files
+├── .env                # Variables entorno
+├── .env.example        # Template de .env
+└── README.md           # Este archivo
 ```
 
 ## Configuración Afip
@@ -205,12 +216,44 @@ Usuario: "SÍ"
    MP_PLAN_ID=tu_plan_id
    ```
 
-## Configuración Evolution + Chatwoot
+## Configuración Wappfly
 
-1. **Evolution API:** Instancia `Facturas-WhatsApp` con número WhatsApp
-2. **Chatwoot:** Canal API `Facturas Whatsapp`
-3. **Webhook URL:** `https://tu-dominio.com/webhooks/evolution`
-4. **Secret:** Token de Chatwoot
+### 1. Crear cuenta Wappfly
+- Ir a https://wappfly.com
+- Sign up / registrarse
+- Completa datos de empresa
+
+### 2. Conectar número WhatsApp
+- En panel Wappfly, escanea QR code
+- Autentica tu número WhatsApp
+- Verifica conexión
+
+### 3. Obtener Token
+- En settings → API Keys
+- Copiar "Bearer Token"
+- Guardar en `.env`:
+  ```
+  WAPPFLY_TOKEN=tu-token-copiado
+  ```
+
+### 4. Configurar Webhook
+- En panel Wappfly → Webhooks
+- **URL:** `https://tu-render-url.onrender.com/webhooks/whatsapp`
+  (O `http://localhost:3001/webhooks/whatsapp` en desarrollo)
+- **Eventos:** Seleccionar `message` (mensajes entrantes)
+- **Save**
+
+### 5. Test local con ngrok
+```bash
+# Terminal 1 - backend
+npm start
+
+# Terminal 2 - ngrok
+ngrok http 3001
+
+# Copy forwarding URL: https://xxxxx-xx-xxx-xxx-xx.ngrok.io
+# Usar esa URL en Wappfly webhook: https://xxxxx-xx-xxx-xxx-xx.ngrok.io/webhooks/whatsapp
+```
 
 ## Deploy (Railway)
 

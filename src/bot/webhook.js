@@ -1,238 +1,112 @@
 // ==========================================
-// WEBHOOK DE WHATSAPP - Recibe mensajes de Meta
+// WEBHOOK DE WHATSAPP - Recibe mensajes de Wappfly
 // ==========================================
 // Este archivo:
-// 1. Verifica webhook de Meta (se ejecuta una sola vez en setup)
-// 2. Recibe todos los mensajes/imágenes/audios que llegan
-// 3. Deduplica mensajes (para no procesar dos veces el mismo)
-// 4. Detecta tipo de mensaje y llama al handler correspondiente
+// 1. Recibe webhooks de Wappfly (POST solamente)
+// 2. Deduplica mensajes (para no procesar dos veces el mismo)
+// 3. Detecta tipo de mensaje (text, image, audio)
+// 4. Llama al handler correspondiente
 
 import { logger, logearError } from '../logger.js';
 import { marcarComoProcesado, yaProcesado } from '../db.js';
 import procesarMensaje from './bot.js';
 
 // ==========================================
-// VERIFICACIÓN DE WEBHOOK (GET request)
+// WEBHOOK DE WAPPFLY
 // ==========================================
+// Wappfly hace POST con este formato:
+// {
+//   "event": "message",
+//   "data": {
+//     "from": "5493764XXXXXX",
+//     "type": "text|image|audio",
+//     "text": "contenido" (solo para text),
+//     "mediaUrl": "https://..." (para image/audio),
+//     "messageId": "XXXXX",
+//     "timestamp": 1234567890
+//   }
+// }
 
-export default function webhookHandler(req, res) {
-  const metodo = req.method;
-
-  // Meta hace GET /webhooks/whatsapp?hub.challenge=token
-  // Nosotros responder con el challenge para verificar
-  if (metodo === 'GET') {
-    return manejarVerificacion(req, res);
+export default async function webhookHandler(req, res) {
+  // Wappfly solo usa POST, no GET
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Solo POST permitido' });
   }
 
-  // Meta hace POST con los mensajes
-  if (metodo === 'POST') {
-    return manejarMensaje(req, res);
-  }
-
-  res.status(405).json({ error: 'Método no permitido' });
-}
-
-// ==========================================
-// GET - VERIFICAR WEBHOOK
-// ==========================================
-
-function manejarVerificacion(req, res) {
-  const modo = req.query['hub.mode'];
-  const token = req.query['hub.challenge'];
-  const miToken = process.env.WEBHOOK_VERIFY_TOKEN;
-
-  // Token debe coincidir exactamente
-  if (modo === 'subscribe' && token === miToken) {
-    logger.info('✅ Webhook verificado por Meta');
-    // Meta espera que respondamos con el challenge
-    return res.status(200).send(token);
-  }
-
-  logger.warn(`❌ Intento de verificación fallido (token incorrecto)`);
-  res.status(403).json({ error: 'Token inválido' });
-}
-
-// ==========================================
-// POST - PROCESAR MENSAJE
-// ==========================================
-
-async function manejarMensaje(req, res) {
   try {
-    // Meta espera respuesta rápida (< 100ms)
-    // Por eso respondemos inmediatamente y procesamos en background
+    // Responder rápido a Wappfly (< 100ms)
     res.status(200).json({ received: true });
 
-    const body = req.body;
+    const { event, data } = req.body;
 
-    // Verificar que es realmente de Meta
-    if (body.object !== 'whatsapp_business_account') {
-      logger.warn('Webhook recibido que no es de WhatsApp');
+    // Solo procesar eventos de mensaje
+    if (event !== 'message' || !data) {
+      logger.debug(`Evento ignorado: ${event}`);
       return;
     }
 
-    // Iterar sobre los cambios (puede haber múltiples en un request)
-    const cambios = body.entry[0]?.changes || [];
+    const { from, type, messageId } = data;
 
-    for (const cambio of cambios) {
-      const metadata = cambio.value?.metadata || {};
-      const mensajes = cambio.value?.messages || [];
-      const estados = cambio.value?.statuses || [];
-
-      // Procesar mensajes
-      for (const mensaje of mensajes) {
-        // Deduplicar: verificar si ya procesamos este mensaje
-        if (yaProcesado(mensaje.id)) {
-          logger.debug(`Mensaje duplicado ignorado: ${mensaje.id}`);
-          continue;
-        }
-
-        // Marcar como procesado para evitar duplicados
-        marcarComoProcesado(mensaje.id);
-
-        // Procesar en background (no esperar)
-        procesarMensaje(
-          mensaje,
-          metadata.phone_number_id,
-          metadata.display_phone_number
-        ).catch(error => {
-          logearError(error, `Procesamiento mensaje ${mensaje.id}`);
-        });
-      }
-
-      // Procesar actualizaciones de estado (entregado, leído, etc)
-      // Estos no requieren respuesta
-      for (const estado of estados) {
-        logger.debug(`Estado de mensaje: ${estado.id} → ${estado.status}`);
-      }
+    // Deduplicar: verificar si ya procesamos este mensaje
+    if (yaProcesado(messageId)) {
+      logger.debug(`Mensaje duplicado ignorado: ${messageId}`);
+      return;
     }
 
+    // Marcar como procesado para evitar duplicados
+    marcarComoProcesado(messageId);
+
+    logger.info(`📨 Mensaje Wappfly: de ${from} tipo=${type} id=${messageId}`);
+
+    // Procesar en background (no esperar respuesta)
+    procesarMensajeWappfly(from, type, data).catch(error => {
+      logearError(error, `Procesamiento mensaje ${messageId}`);
+    });
+
   } catch (error) {
-    logearError(error, 'Webhook handler');
-    // Ya respondimos 200, así que solo loguear
+    logearError(error, 'Webhook Wappfly');
+    // Ya respondimos 200, solo loguear
   }
 }
 
 // ==========================================
-// ENVÍO DE MENSAJES DE RESPUESTA
+// PROCESAR MENSAJE SEGÚN TIPO
 // ==========================================
 
-export async function enviarMensajePorMeta(numeroDestino, texto) {
+async function procesarMensajeWappfly(numero, tipo, data) {
   try {
-    const token = process.env.WHATSAPP_TOKEN;
-    const phoneID = process.env.WHATSAPP_PHONE_ID;
+    let contenido = '';
+    let tipoContenido = 'texto';
 
-    const respuesta = await fetch(
-      `https://graph.instagram.com/v18.0/${phoneID}/messages`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          messaging_product: 'whatsapp',
-          to: numeroDestino,
-          type: 'text',
-          text: { body: texto }
-        })
-      }
-    );
-
-    if (!respuesta.ok) {
-      const errorData = await respuesta.json();
-      throw new Error(`Meta API error: ${errorData.error?.message || respuesta.statusText}`);
+    // Extraer contenido según tipo de mensaje
+    if (tipo === 'text') {
+      contenido = data.text || '';
+      tipoContenido = 'texto';
+    } else if (tipo === 'image') {
+      contenido = data.mediaUrl || '';
+      tipoContenido = 'imagen';
+    } else if (tipo === 'audio') {
+      contenido = data.mediaUrl || '';
+      tipoContenido = 'audio';
+    } else {
+      logger.warn(`Tipo de mensaje desconocido: ${tipo}`);
+      return;
     }
 
-    const data = await respuesta.json();
-    logger.debug(`Mensaje enviado a ${numeroDestino}: ${data.messages?.[0]?.id}`);
-    return data;
+    logger.info(`✅ Procesando mensaje [${tipoContenido}] de ${numero}`);
+
+    // Llamar al procesador general (mismo que Meta)
+    // Estructura compatible: { from, type, content }
+    await procesarMensaje({
+      from: numero,
+      type: tipo,
+      content: contenido,
+      mediaUrl: data.mediaUrl,
+      messageId: data.messageId,
+      timestamp: data.timestamp
+    });
 
   } catch (error) {
-    logearError(error, `Envío mensaje a ${numeroDestino}`);
-    throw error;
-  }
-}
-
-// Enviar documento (PDF) por WhatsApp
-export async function enviarDocumentoPorMeta(numeroDestino, urlDocumento, nombreArchivo) {
-  try {
-    const token = process.env.WHATSAPP_TOKEN;
-    const phoneID = process.env.WHATSAPP_PHONE_ID;
-
-    const respuesta = await fetch(
-      `https://graph.instagram.com/v18.0/${phoneID}/messages`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          messaging_product: 'whatsapp',
-          to: numeroDestino,
-          type: 'document',
-          document: {
-            link: urlDocumento,
-            filename: nombreArchivo
-          }
-        })
-      }
-    );
-
-    if (!respuesta.ok) {
-      const errorData = await respuesta.json();
-      throw new Error(`Meta API error: ${errorData.error?.message || respuesta.statusText}`);
-    }
-
-    const data = await respuesta.json();
-    logger.debug(`Documento enviado a ${numeroDestino}`);
-    return data;
-
-  } catch (error) {
-    logearError(error, `Envío documento a ${numeroDestino}`);
-    throw error;
-  }
-}
-
-// Enviar template de mensaje (predefinidos por Meta)
-export async function enviarTemplatePorMeta(numeroDestino, nombreTemplate, idioma = 'es') {
-  try {
-    const token = process.env.WHATSAPP_TOKEN;
-    const phoneID = process.env.WHATSAPP_PHONE_ID;
-
-    const respuesta = await fetch(
-      `https://graph.instagram.com/v18.0/${phoneID}/messages`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          messaging_product: 'whatsapp',
-          to: numeroDestino,
-          type: 'template',
-          template: {
-            name: nombreTemplate,
-            language: {
-              code: idioma
-            }
-          }
-        })
-      }
-    );
-
-    if (!respuesta.ok) {
-      const errorData = await respuesta.json();
-      throw new Error(`Meta API error: ${errorData.error?.message || respuesta.statusText}`);
-    }
-
-    const data = await respuesta.json();
-    logger.debug(`Template enviado a ${numeroDestino}`);
-    return data;
-
-  } catch (error) {
-    logearError(error, `Envío template a ${numeroDestino}`);
-    throw error;
+    logearError(error, `Procesamiento mensaje Wappfly`);
   }
 }
