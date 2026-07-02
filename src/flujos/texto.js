@@ -13,7 +13,7 @@ import {
   mostrarMenuPrincipal,
   limpiarConversacion
 } from '../bot/conversacion.js';
-import { enviarMensajePorMeta } from '../bot/webhook.js';
+import { enviarTexto } from '../whatsapp/mensajes.js';
 import { MENSAJES } from '../bot/plantillas.js';
 import { logger } from '../logger.js';
 import { validarCUIT, validarDocumento, validarImporte } from '../facturacion/validaciones.js';
@@ -27,7 +27,7 @@ export default async function procesarTexto(numeroDeTelefono, texto, usuario, pa
     // CANCELAR - SIEMPRE VÁLIDO
     if (textoNorm === 'CANCELAR' || textoNorm === 'ESC') {
       limpiarConversacion(numeroDeTelefono);
-      await enviarMensajePorMeta(numeroDeTelefono, 'Cancelado. Volvé cuando quieras.');
+      await enviarTexto(numeroDeTelefono, 'Cancelado. Volvé cuando quieras.');
       return;
     }
 
@@ -76,7 +76,7 @@ export default async function procesarTexto(numeroDeTelefono, texto, usuario, pa
 
   } catch (error) {
     logger.error(`Error en procesarTexto: ${error.message}`);
-    await enviarMensajePorMeta(numeroDeTelefono, '❌ Error procesando. Volvemos al menú.');
+    await enviarTexto(numeroDeTelefono, '❌ Error procesando. Volvemos al menú.');
     await mostrarMenuPrincipal(numeroDeTelefono, usuario.nombre);
   }
 }
@@ -87,42 +87,42 @@ async function validarYGuardarCUIT(numeroDeTelefono, texto, usuario) {
   const cuit = texto.replace(/\D/g, '');
 
   if (!validarCUIT(cuit)) {
-    await enviarMensajePorMeta(numeroDeTelefono,
+    await enviarTexto(numeroDeTelefono,
       '❌ CUIT inválido. Debe ser 11 dígitos (ej: 20123456789)');
     return;
   }
 
   guardarDato(numeroDeTelefono, 'cuit', cuit);
   siguientePaso(numeroDeTelefono, PASOS.ONBOARDING_RAZON_SOCIAL);
-  await enviarMensajePorMeta(numeroDeTelefono, MENSAJES.PREGUNTA_RAZON_SOCIAL);
+  await enviarTexto(numeroDeTelefono, MENSAJES.PREGUNTA_RAZON_SOCIAL);
 }
 
 async function validarYGuardarRazonSocial(numeroDeTelefono, texto, usuario) {
   const razonSocial = texto.trim();
 
   if (razonSocial.length < 3) {
-    await enviarMensajePorMeta(numeroDeTelefono,
+    await enviarTexto(numeroDeTelefono,
       '❌ Razón social muy corta. Mínimo 3 caracteres.');
     return;
   }
 
   guardarDato(numeroDeTelefono, 'razon_social', razonSocial);
   siguientePaso(numeroDeTelefono, PASOS.ONBOARDING_DOMICILIO);
-  await enviarMensajePorMeta(numeroDeTelefono, MENSAJES.PREGUNTA_DOMICILIO);
+  await enviarTexto(numeroDeTelefono, MENSAJES.PREGUNTA_DOMICILIO);
 }
 
 async function validarYGuardarDomicilio(numeroDeTelefono, texto, usuario) {
   const domicilio = texto.trim();
 
   if (domicilio.length < 5) {
-    await enviarMensajePorMeta(numeroDeTelefono,
+    await enviarTexto(numeroDeTelefono,
       '❌ Domicilio muy corto. Incluí calle, número, piso.');
     return;
   }
 
   guardarDato(numeroDeTelefono, 'domicilio', domicilio);
   siguientePaso(numeroDeTelefono, PASOS.ONBOARDING_CONDICION_IVA);
-  await enviarMensajePorMeta(numeroDeTelefono,
+  await enviarTexto(numeroDeTelefono,
     '🏛️ ¿Cuál es tu condición IVA?\n\n1️⃣ Monotributista\n2️⃣ Responsable Inscripto\n\nResponde 1 o 2');
 }
 
@@ -134,14 +134,14 @@ async function validarYGuardarCondicionIVA(numeroDeTelefono, textoNorm, usuario)
   } else if (textoNorm === '2' || textoNorm.includes('RESPONSABLE')) {
     condicion = 'Responsable Inscripto';
   } else {
-    await enviarMensajePorMeta(numeroDeTelefono,
+    await enviarTexto(numeroDeTelefono,
       '❌ Respondé 1 (Monotributista) o 2 (Responsable Inscripto)');
     return;
   }
 
   guardarDato(numeroDeTelefono, 'condicion_iva', condicion);
   siguientePaso(numeroDeTelefono, PASOS.ONBOARDING_PUNTO_VENTA);
-  await enviarMensajePorMeta(numeroDeTelefono,
+  await enviarTexto(numeroDeTelefono,
     '🏪 ¿Punto de venta? (número o "NO TENGO")');
 }
 
@@ -149,7 +149,7 @@ async function validarYGuardarPuntoVenta(numeroDeTelefono, texto, usuario) {
   const textoNorm = texto.trim().toUpperCase();
 
   if (textoNorm.includes('NO') || textoNorm.includes('SIN')) {
-    await enviarMensajePorMeta(numeroDeTelefono,
+    await enviarTexto(numeroDeTelefono,
       '⚠️ Necesitas un punto de venta. Consultá con AFIP.');
     return;
   }
@@ -157,7 +157,7 @@ async function validarYGuardarPuntoVenta(numeroDeTelefono, texto, usuario) {
   const puntoVenta = parseInt(texto.trim());
 
   if (isNaN(puntoVenta) || puntoVenta < 1 || puntoVenta > 99999) {
-    await enviarMensajePorMeta(numeroDeTelefono,
+    await enviarTexto(numeroDeTelefono,
       '❌ Punto de venta inválido. Debe ser un número entre 1 y 99999.');
     return;
   }
@@ -177,12 +177,12 @@ async function validarYGuardarPuntoVenta(numeroDeTelefono, texto, usuario) {
     });
 
     limpiarConversacion(numeroDeTelefono);
-    await enviarMensajePorMeta(numeroDeTelefono,
+    await enviarTexto(numeroDeTelefono,
       '✅ Setup completo. Ahora podés emitir facturas.');
     await mostrarMenuPrincipal(numeroDeTelefono, datosOnboarding.razon_social);
   } catch (err) {
     logger.error(`Error guardando setup: ${err.message}`);
-    await enviarMensajePorMeta(numeroDeTelefono, '❌ Error guardando datos.');
+    await enviarTexto(numeroDeTelefono, '❌ Error guardando datos.');
   }
 }
 
@@ -192,14 +192,14 @@ async function validarYGuardarCliente(numeroDeTelefono, texto, usuario) {
   const cliente = texto.trim();
 
   if (cliente.length < 3) {
-    await enviarMensajePorMeta(numeroDeTelefono,
+    await enviarTexto(numeroDeTelefono,
       '❌ Nombre muy corto. Mínimo 3 caracteres.');
     return;
   }
 
   guardarDato(numeroDeTelefono, 'razon_social_cliente', cliente);
   siguientePaso(numeroDeTelefono, PASOS.FLUJO_DOCUMENTO);
-  await enviarMensajePorMeta(numeroDeTelefono,
+  await enviarTexto(numeroDeTelefono,
     '🔢 ¿CUIT o DNI del cliente?\n\nFormatos:\n• CUIT: 20123456789\n• DNI: 12345678\n• CF (consumidor final)');
 }
 
@@ -209,33 +209,33 @@ async function validarYGuardarDocumento(numeroDeTelefono, texto, usuario) {
   if (texto.toUpperCase().trim() === 'CF') {
     guardarDato(numeroDeTelefono, 'documento_cliente', 'CF');
     siguientePaso(numeroDeTelefono, PASOS.FLUJO_CONCEPTO);
-    await enviarMensajePorMeta(numeroDeTelefono, MENSAJES.PREGUNTA_CONCEPTO);
+    await enviarTexto(numeroDeTelefono, MENSAJES.PREGUNTA_CONCEPTO);
     return;
   }
 
   if (!validarDocumento(doc)) {
-    await enviarMensajePorMeta(numeroDeTelefono,
+    await enviarTexto(numeroDeTelefono,
       '❌ Documento inválido. CUIT 11 dígitos, DNI 8 dígitos, o CF.');
     return;
   }
 
   guardarDato(numeroDeTelefono, 'documento_cliente', doc);
   siguientePaso(numeroDeTelefono, PASOS.FLUJO_CONCEPTO);
-  await enviarMensajePorMeta(numeroDeTelefono, MENSAJES.PREGUNTA_CONCEPTO);
+  await enviarTexto(numeroDeTelefono, MENSAJES.PREGUNTA_CONCEPTO);
 }
 
 async function validarYGuardarConcepto(numeroDeTelefono, texto, usuario) {
   const concepto = texto.trim();
 
   if (concepto.length < 3) {
-    await enviarMensajePorMeta(numeroDeTelefono,
+    await enviarTexto(numeroDeTelefono,
       '❌ Concepto muy corto. Describe qué se factura.');
     return;
   }
 
   guardarDato(numeroDeTelefono, 'concepto', concepto);
   siguientePaso(numeroDeTelefono, PASOS.FLUJO_IMPORTE);
-  await enviarMensajePorMeta(numeroDeTelefono,
+  await enviarTexto(numeroDeTelefono,
     '💰 ¿Importe en pesos? (solo números, sin . ni ,)\n\nEj: 5000');
 }
 
@@ -243,7 +243,7 @@ async function validarYGuardarImporte(numeroDeTelefono, texto, usuario) {
   const importe = parseFloat(texto.replace(/,/g, '.'));
 
   if (!validarImporte(importe)) {
-    await enviarMensajePorMeta(numeroDeTelefono,
+    await enviarTexto(numeroDeTelefono,
       '❌ Importe inválido. Debe ser número > 0.\n\nEj: 5000 o 1500.50');
     return;
   }
@@ -254,7 +254,7 @@ async function validarYGuardarImporte(numeroDeTelefono, texto, usuario) {
   const conversacion = obtenerEstado(numeroDeTelefono);
   const datosActuales = JSON.parse(conversacion.datos || '{}');
 
-  await enviarMensajePorMeta(numeroDeTelefono,
+  await enviarTexto(numeroDeTelefono,
     `✅ Confirmá estos datos:\n\n• Cliente: ${datosActuales.razon_social_cliente}\n• Documento: ${datosActuales.documento_cliente}\n• Concepto: ${datosActuales.concepto}\n• Importe: $${datosActuales.importe}\n\nResponde SI para crear factura o NO para empezar de nuevo.`);
 }
 
@@ -264,7 +264,7 @@ async function confirmarFactura(numeroDeTelefono, textoNorm, usuario) {
   if (textoNorm === 'SI' || textoNorm === 'SÍ') {
     // Crear factura (delegar a otro módulo)
     logger.info(`✅ Factura confirmada para ${numeroDeTelefono}`);
-    await enviarMensajePorMeta(numeroDeTelefono,
+    await enviarTexto(numeroDeTelefono,
       '✅ Factura creada.\n\n🔗 Descargá tu PDF en el panel.');
     limpiarConversacion(numeroDeTelefono);
     await mostrarMenuPrincipal(numeroDeTelefono, usuario.nombre);
@@ -273,13 +273,13 @@ async function confirmarFactura(numeroDeTelefono, textoNorm, usuario) {
 
   if (textoNorm === 'NO') {
     limpiarConversacion(numeroDeTelefono);
-    await enviarMensajePorMeta(numeroDeTelefono,
+    await enviarTexto(numeroDeTelefono,
       'Cancelado. Volvemos al menú.');
     await mostrarMenuPrincipal(numeroDeTelefono, usuario.nombre);
     return;
   }
 
-  await enviarMensajePorMeta(numeroDeTelefono,
+  await enviarTexto(numeroDeTelefono,
     '❌ Respondé SI o NO');
 }
 
@@ -289,24 +289,24 @@ async function procesarMenuPrincipal(numeroDeTelefono, textoNorm, usuario) {
   if (textoNorm === '1') {
     // Nueva factura
     siguientePaso(numeroDeTelefono, PASOS.FLUJO_CLIENTE);
-    await enviarMensajePorMeta(numeroDeTelefono,
+    await enviarTexto(numeroDeTelefono,
       '📋 Nueva factura.\n\n¿A nombre de quién va?');
     return;
   }
 
   if (textoNorm === '2') {
-    await enviarMensajePorMeta(numeroDeTelefono,
+    await enviarTexto(numeroDeTelefono,
       '📊 Función no disponible aún.');
     return;
   }
 
   if (textoNorm === '3') {
-    await enviarMensajePorMeta(numeroDeTelefono,
+    await enviarTexto(numeroDeTelefono,
       `👤 Tus datos:\n\nRazón Social: ${usuario.razon_social}\nCUIT: ${usuario.cuit}\nCondición IVA: ${usuario.condicion_iva}`);
     return;
   }
 
   // Off-topic o input inválido
-  await enviarMensajePorMeta(numeroDeTelefono,
+  await enviarTexto(numeroDeTelefono,
     '❌ No entiendo.\n\n1️⃣ Emitir factura\n2️⃣ Última factura\n3️⃣ Mis datos\n\nResponde 1, 2 o 3');
 }

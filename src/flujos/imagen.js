@@ -12,7 +12,7 @@ import {
   PASOS,
   obtenerEstado
 } from '../bot/conversacion.js';
-import { enviarMensajePorMeta } from '../bot/webhook.js';
+import { enviarTexto } from '../whatsapp/mensajes.js';
 import { MENSAJES } from '../bot/plantillas.js';
 import { logger } from '../logger.js';
 import { analizarImagenFactura } from '../ia/vision.js';
@@ -21,13 +21,13 @@ import procesarTexto from './texto.js';
 export default async function procesarImagen(numeroDeTelefono, imagenID, usuario) {
   try {
     // Mostrar mensaje de análisis
-    await enviarMensajePorMeta(numeroDeTelefono, MENSAJES.ANALIZANDO_IMAGEN);
+    await enviarTexto(numeroDeTelefono, MENSAJES.ANALIZANDO_IMAGEN);
 
     // Analizar con Claude
     const datosImagen = await analizarImagenFactura(imagenID);
 
     if (!datosImagen) {
-      await enviarMensajePorMeta(numeroDeTelefono, MENSAJES.IMAGEN_CONFIANZA_BAJA);
+      await enviarTexto(numeroDeTelefono, MENSAJES.IMAGEN_CONFIANZA_BAJA);
       // Ir a flujo texto manual
       siguientePaso(numeroDeTelefono, PASOS.FLUJO_CLIENTE, {});
       return;
@@ -42,26 +42,26 @@ export default async function procesarImagen(numeroDeTelefono, imagenID, usuario
     // Mostrar confirmación según confianza
     if (datosImagen.confianza === 'alta') {
       siguientePaso(numeroDeTelefono, PASOS.CONFIRMACION_FACTURA);
-      await enviarMensajePorMeta(
+      await enviarTexto(
         numeroDeTelefono,
         MENSAJES.IMAGEN_CONFIANZA_ALTA(datosImagen)
       );
 
     } else if (datosImagen.confianza === 'media') {
       siguientePaso(numeroDeTelefono, PASOS.CONFIRMACION_FACTURA);
-      await enviarMensajePorMeta(
+      await enviarTexto(
         numeroDeTelefono,
         MENSAJES.IMAGEN_CONFIANZA_MEDIA(datosImagen)
       );
 
     } else {
       // Confianza baja - ir a entrada manual
-      await enviarMensajePorMeta(numeroDeTelefono, MENSAJES.IMAGEN_CONFIANZA_BAJA);
+      await enviarTexto(numeroDeTelefono, MENSAJES.IMAGEN_CONFIANZA_BAJA);
       siguientePaso(numeroDeTelefono, PASOS.FLUJO_CLIENTE, {});
     }
 
   } catch (error) {
     logger.error(`Error procesando imagen: ${error.message}`);
-    await enviarMensajePorMeta(numeroDeTelefono, MENSAJES.ERROR_GENERICO);
+    await enviarTexto(numeroDeTelefono, MENSAJES.ERROR_GENERICO);
   }
 }

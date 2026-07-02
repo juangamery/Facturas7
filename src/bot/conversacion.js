@@ -12,7 +12,7 @@ import {
 } from '../db.js';
 import { logger } from '../logger.js';
 import { MENSAJES } from './plantillas.js';
-import { enviarMensajePorMeta } from './webhook.js';
+import { enviarTexto } from '../whatsapp/mensajes.js';
 
 // Máquina de estados
 export const PASOS = {
@@ -78,7 +78,7 @@ export function limpiarConversacion(numeroDeTelefono) {
 export async function iniciarOnboarding(numeroDeTelefono) {
   try {
     siguientePaso(numeroDeTelefono, PASOS.ONBOARDING_CUIT);
-    await enviarMensajePorMeta(numeroDeTelefono, MENSAJES.BIENVENIDA_ONBOARDING);
+    await enviarTexto(numeroDeTelefono, MENSAJES.BIENVENIDA_ONBOARDING);
   } catch (error) {
     logger.error(`Error iniciando onboarding: ${error.message}`);
   }
@@ -91,7 +91,7 @@ export async function iniciarOnboarding(numeroDeTelefono) {
 export async function iniciarFlujoFactura(numeroDeTelefono) {
   try {
     siguientePaso(numeroDeTelefono, PASOS.FLUJO_CLIENTE, {});
-    await enviarMensajePorMeta(numeroDeTelefono, MENSAJES.PREGUNTA_CLIENTE);
+    await enviarTexto(numeroDeTelefono, MENSAJES.PREGUNTA_CLIENTE);
   } catch (error) {
     logger.error(`Error iniciando flujo: ${error.message}`);
   }
@@ -113,7 +113,7 @@ export async function mostrarMenuPrincipal(numeroDeTelefono, usuario) {
 
     // Si tiene datos completos, mostrar menú
     siguientePaso(numeroDeTelefono, PASOS.MENU_PRINCIPAL);
-    await enviarMensajePorMeta(
+    await enviarTexto(
       numeroDeTelefono,
       MENSAJES.MENU_PRINCIPAL(nombreUsuario)
     );

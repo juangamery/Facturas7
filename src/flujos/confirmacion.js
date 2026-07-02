@@ -14,7 +14,7 @@ import {
   limpiarConversacion,
   mostrarMenuPrincipal
 } from '../bot/conversacion.js';
-import { enviarMensajePorMeta, enviarDocumentoPorMeta } from '../bot/webhook.js';
+import { enviarTexto, enviarDocumento } from '../whatsapp/mensajes.js';
 import { MENSAJES } from '../bot/plantillas.js';
 import { logger, logearError } from '../logger.js';
 import { actualizarUsuario, crearFactura, obtenerUsuarioPorID } from '../db.js';
@@ -29,7 +29,7 @@ export default async function emitirFactura(numeroDeTelefono, usuario) {
     // Obtener datos de conversación
     const conversacion = obtenerEstado(numeroDeTelefono);
     if (!conversacion) {
-      await enviarMensajePorMeta(numeroDeTelefono, MENSAJES.ERROR_GENERICO);
+      await enviarTexto(numeroDeTelefono, MENSAJES.ERROR_GENERICO);
       return;
     }
 
@@ -58,13 +58,13 @@ export default async function emitirFactura(numeroDeTelefono, usuario) {
     const validacion = validarDatosFactura(datosFactura);
     if (!validacion.valido) {
       const erroresTexto = validacion.errores.join('\n');
-      await enviarMensajePorMeta(numeroDeTelefono, `❌ Errores:\n${erroresTexto}`);
+      await enviarTexto(numeroDeTelefono, `❌ Errores:\n${erroresTexto}`);
       return;
     }
 
     // ===== STEP 2: SOLICITAR CAE A AFIP SDK =====
 
-    await enviarMensajePorMeta(numeroDeTelefono, MENSAJES.EMITIENDO_FACTURA);
+    await enviarTexto(numeroDeTelefono, MENSAJES.EMITIENDO_FACTURA);
 
     const caeDatos = await solicitarCAE(datosFactura);
 
@@ -84,7 +84,7 @@ export default async function emitirFactura(numeroDeTelefono, usuario) {
     // Calcular URL pública para servir el PDF
     const urlPDF = `${process.env.BASE_URL}/facturas/${path.basename(rutaPDF)}`;
 
-    await enviarDocumentoPorMeta(
+    await enviarDocumento(
       numeroDeTelefono,
       urlPDF,
       `Factura_${datosFactura.numero_factura}.pdf`
@@ -116,7 +116,7 @@ export default async function emitirFactura(numeroDeTelefono, usuario) {
 
     // ===== STEP 7: ENVIAR CONFIRMACIÓN =====
 
-    await enviarMensajePorMeta(
+    await enviarTexto(
       numeroDeTelefono,
       MENSAJES.FACTURA_EMITIDA(datosFactura)
     );
@@ -133,7 +133,7 @@ export default async function emitirFactura(numeroDeTelefono, usuario) {
     logearError(error, 'emitirFactura');
 
     // Enviar mensaje de error
-    await enviarMensajePorMeta(numeroDeTelefono, MENSAJES.ERROR_EMITIR);
+    await enviarTexto(numeroDeTelefono, MENSAJES.ERROR_EMITIR);
 
     // Limpiar conversación para que vuelva a intentar
     limpiarConversacion(numeroDeTelefono);
