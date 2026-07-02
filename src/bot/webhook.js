@@ -81,8 +81,15 @@ async function obtenerMensajesWappfly() {
       if (yaProcesado(messageId)) continue;
       marcarComoProcesado(messageId);
 
-      // Extraer número sin @s.whatsapp.net
+      // Extraer número SOLO de chats directos (@s.whatsapp.net), no grupos (@lid)
       const numeroCompleto = msg.sender_jid || msg.chat_jid || '';
+
+      // Filtrar: solo números diretos, no grupos
+      if (!numeroCompleto.endsWith('@s.whatsapp.net')) {
+        logger.debug(`Mensaje de grupo ignorado: ${numeroCompleto}`);
+        continue;
+      }
+
       const numero = numeroCompleto.split('@')[0];
       if (!numero) {
         logger.warn(`Mensaje sin número: ${messageId}`);
