@@ -82,7 +82,7 @@ export default async function procesarMensaje(mensaje, phoneID, displayPhoneNumb
 
 async function procesarTextoGenerico(numeroDeTelefono, texto, usuario) {
   // Obtener estado actual de conversación
-  const conversacion = obtenerEstado(numeroDeTelefono);
+  const conversacion = await obtenerEstado(numeroDeTelefono);
   const paso = conversacion?.paso || 'menu_principal';
   const datos = conversacion?.datos ? JSON.parse(conversacion.datos) : {};
 
@@ -92,7 +92,7 @@ async function procesarTextoGenerico(numeroDeTelefono, texto, usuario) {
   // Detectar intenciones rápidas (palabras clave)
   if (textoNormalizado === 'CANCELAR') {
     const { limpiarConversacion } = await import('./conversacion.js');
-    limpiarConversacion(numeroDeTelefono);
+    await limpiarConversacion(numeroDeTelefono);
     await enviarTexto(numeroDeTelefono, MENSAJES.CANCELADO);
     return;
   }
@@ -134,11 +134,11 @@ async function procesarAudioGenerico(numeroDeTelefono, audioID, usuario) {
     }
 
     const { siguientePaso, guardarDato, PASOS } = await import('./conversacion.js');
-    guardarDato(numeroDeTelefono, 'razon_social_cliente', audioResultado.datos?.razon_social);
-    guardarDato(numeroDeTelefono, 'documento_cliente', audioResultado.datos?.documento);
-    guardarDato(numeroDeTelefono, 'concepto', audioResultado.datos?.concepto);
-    guardarDato(numeroDeTelefono, 'importe', audioResultado.datos?.importe);
-    siguientePaso(numeroDeTelefono, PASOS.CONFIRMACION_FACTURA);
+    await guardarDato(numeroDeTelefono, 'razon_social_cliente', audioResultado.datos?.razon_social);
+    await guardarDato(numeroDeTelefono, 'documento_cliente', audioResultado.datos?.documento);
+    await guardarDato(numeroDeTelefono, 'concepto', audioResultado.datos?.concepto);
+    await guardarDato(numeroDeTelefono, 'importe', audioResultado.datos?.importe);
+    await siguientePaso(numeroDeTelefono, PASOS.CONFIRMACION_FACTURA);
 
     await enviarTexto(
       numeroDeTelefono,

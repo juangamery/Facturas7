@@ -26,7 +26,7 @@ export default async function procesarTexto(numeroDeTelefono, texto, usuario, pa
 
     // CANCELAR - SIEMPRE VÁLIDO
     if (textoNorm === 'CANCELAR' || textoNorm === 'ESC') {
-      limpiarConversacion(numeroDeTelefono);
+      await limpiarConversacion(numeroDeTelefono);
       await enviarTexto(numeroDeTelefono, 'Cancelado. Volvé cuando quieras.');
       return;
     }
@@ -72,12 +72,12 @@ export default async function procesarTexto(numeroDeTelefono, texto, usuario, pa
 
     // Default: paso desconocido
     logger.warn(`Paso desconocido: ${paso}`);
-    await mostrarMenuPrincipal(numeroDeTelefono, usuario.nombre);
+    await mostrarMenuPrincipal(numeroDeTelefono, usuario);
 
   } catch (error) {
     logger.error(`Error en procesarTexto: ${error.message}`);
     await enviarTexto(numeroDeTelefono, '❌ Error procesando. Volvemos al menú.');
-    await mostrarMenuPrincipal(numeroDeTelefono, usuario.nombre);
+    await mostrarMenuPrincipal(numeroDeTelefono, usuario);
   }
 }
 
@@ -92,8 +92,8 @@ async function validarYGuardarCUIT(numeroDeTelefono, texto, usuario) {
     return;
   }
 
-  guardarDato(numeroDeTelefono, 'cuit', cuit);
-  siguientePaso(numeroDeTelefono, PASOS.ONBOARDING_RAZON_SOCIAL);
+  await guardarDato(numeroDeTelefono, 'cuit', cuit);
+  await siguientePaso(numeroDeTelefono, PASOS.ONBOARDING_RAZON_SOCIAL);
   await enviarTexto(numeroDeTelefono, MENSAJES.PREGUNTA_RAZON_SOCIAL);
 }
 
@@ -106,8 +106,8 @@ async function validarYGuardarRazonSocial(numeroDeTelefono, texto, usuario) {
     return;
   }
 
-  guardarDato(numeroDeTelefono, 'razon_social', razonSocial);
-  siguientePaso(numeroDeTelefono, PASOS.ONBOARDING_DOMICILIO);
+  await guardarDato(numeroDeTelefono, 'razon_social', razonSocial);
+  await siguientePaso(numeroDeTelefono, PASOS.ONBOARDING_DOMICILIO);
   await enviarTexto(numeroDeTelefono, MENSAJES.PREGUNTA_DOMICILIO);
 }
 
@@ -120,8 +120,8 @@ async function validarYGuardarDomicilio(numeroDeTelefono, texto, usuario) {
     return;
   }
 
-  guardarDato(numeroDeTelefono, 'domicilio', domicilio);
-  siguientePaso(numeroDeTelefono, PASOS.ONBOARDING_CONDICION_IVA);
+  await guardarDato(numeroDeTelefono, 'domicilio', domicilio);
+  await siguientePaso(numeroDeTelefono, PASOS.ONBOARDING_CONDICION_IVA);
   await enviarTexto(numeroDeTelefono,
     '🏛️ ¿Cuál es tu condición IVA?\n\n1️⃣ Monotributista\n2️⃣ Responsable Inscripto\n\nResponde 1 o 2');
 }
@@ -139,8 +139,8 @@ async function validarYGuardarCondicionIVA(numeroDeTelefono, textoNorm, usuario)
     return;
   }
 
-  guardarDato(numeroDeTelefono, 'condicion_iva', condicion);
-  siguientePaso(numeroDeTelefono, PASOS.ONBOARDING_PUNTO_VENTA);
+  await guardarDato(numeroDeTelefono, 'condicion_iva', condicion);
+  await siguientePaso(numeroDeTelefono, PASOS.ONBOARDING_PUNTO_VENTA);
   await enviarTexto(numeroDeTelefono,
     '🏪 ¿Punto de venta? (número o "NO TENGO")');
 }
@@ -163,7 +163,7 @@ async function validarYGuardarPuntoVenta(numeroDeTelefono, texto, usuario) {
   }
 
   // Guardar datos en BD
-  const conversacion = obtenerEstado(numeroDeTelefono);
+  const conversacion = await obtenerEstado(numeroDeTelefono);
   const datosOnboarding = JSON.parse(conversacion.datos || '{}');
 
   try {
@@ -176,10 +176,12 @@ async function validarYGuardarPuntoVenta(numeroDeTelefono, texto, usuario) {
       nombre: datosOnboarding.razon_social
     });
 
-    limpiarConversacion(numeroDeTelefono);
+    await limpiarConversacion(numeroDeTelefono);
     await enviarTexto(numeroDeTelefono,
       '✅ Setup completo. Ahora podés emitir facturas.');
-    await mostrarMenuPrincipal(numeroDeTelefono, datosOnboarding.razon_social);
+    // Usuario ya completó onboarding: pasarlo con datos actualizados
+    const usuarioCompleto = { ...usuario, cuit: datosOnboarding.cuit, punto_venta: puntoVenta, nombre: datosOnboarding.razon_social };
+    await mostrarMenuPrincipal(numeroDeTelefono, usuarioCompleto);
   } catch (err) {
     logger.error(`Error guardando setup: ${err.message}`);
     await enviarTexto(numeroDeTelefono, '❌ Error guardando datos.');
@@ -197,8 +199,8 @@ async function validarYGuardarCliente(numeroDeTelefono, texto, usuario) {
     return;
   }
 
-  guardarDato(numeroDeTelefono, 'razon_social_cliente', cliente);
-  siguientePaso(numeroDeTelefono, PASOS.FLUJO_DOCUMENTO);
+  await guardarDato(numeroDeTelefono, 'razon_social_cliente', cliente);
+  await siguientePaso(numeroDeTelefono, PASOS.FLUJO_DOCUMENTO);
   await enviarTexto(numeroDeTelefono,
     '🔢 ¿CUIT o DNI del cliente?\n\nFormatos:\n• CUIT: 20123456789\n• DNI: 12345678\n• CF (consumidor final)');
 }
@@ -207,8 +209,8 @@ async function validarYGuardarDocumento(numeroDeTelefono, texto, usuario) {
   const doc = texto.replace(/\D/g, '').toUpperCase();
 
   if (texto.toUpperCase().trim() === 'CF') {
-    guardarDato(numeroDeTelefono, 'documento_cliente', 'CF');
-    siguientePaso(numeroDeTelefono, PASOS.FLUJO_CONCEPTO);
+    await guardarDato(numeroDeTelefono, 'documento_cliente', 'CF');
+    await siguientePaso(numeroDeTelefono, PASOS.FLUJO_CONCEPTO);
     await enviarTexto(numeroDeTelefono, MENSAJES.PREGUNTA_CONCEPTO);
     return;
   }
@@ -219,8 +221,8 @@ async function validarYGuardarDocumento(numeroDeTelefono, texto, usuario) {
     return;
   }
 
-  guardarDato(numeroDeTelefono, 'documento_cliente', doc);
-  siguientePaso(numeroDeTelefono, PASOS.FLUJO_CONCEPTO);
+  await guardarDato(numeroDeTelefono, 'documento_cliente', doc);
+  await siguientePaso(numeroDeTelefono, PASOS.FLUJO_CONCEPTO);
   await enviarTexto(numeroDeTelefono, MENSAJES.PREGUNTA_CONCEPTO);
 }
 
@@ -233,8 +235,8 @@ async function validarYGuardarConcepto(numeroDeTelefono, texto, usuario) {
     return;
   }
 
-  guardarDato(numeroDeTelefono, 'concepto', concepto);
-  siguientePaso(numeroDeTelefono, PASOS.FLUJO_IMPORTE);
+  await guardarDato(numeroDeTelefono, 'concepto', concepto);
+  await siguientePaso(numeroDeTelefono, PASOS.FLUJO_IMPORTE);
   await enviarTexto(numeroDeTelefono,
     '💰 ¿Importe en pesos? (solo números, sin . ni ,)\n\nEj: 5000');
 }
@@ -248,10 +250,10 @@ async function validarYGuardarImporte(numeroDeTelefono, texto, usuario) {
     return;
   }
 
-  guardarDato(numeroDeTelefono, 'importe', importe.toString());
-  siguientePaso(numeroDeTelefono, PASOS.CONFIRMACION_FACTURA);
+  await guardarDato(numeroDeTelefono, 'importe', importe.toString());
+  await siguientePaso(numeroDeTelefono, PASOS.CONFIRMACION_FACTURA);
 
-  const conversacion = obtenerEstado(numeroDeTelefono);
+  const conversacion = await obtenerEstado(numeroDeTelefono);
   const datosActuales = JSON.parse(conversacion.datos || '{}');
 
   await enviarTexto(numeroDeTelefono,
@@ -266,16 +268,16 @@ async function confirmarFactura(numeroDeTelefono, textoNorm, usuario) {
     logger.info(`✅ Factura confirmada para ${numeroDeTelefono}`);
     await enviarTexto(numeroDeTelefono,
       '✅ Factura creada.\n\n🔗 Descargá tu PDF en el panel.');
-    limpiarConversacion(numeroDeTelefono);
-    await mostrarMenuPrincipal(numeroDeTelefono, usuario.nombre);
+    await limpiarConversacion(numeroDeTelefono);
+    await mostrarMenuPrincipal(numeroDeTelefono, usuario);
     return;
   }
 
   if (textoNorm === 'NO') {
-    limpiarConversacion(numeroDeTelefono);
+    await limpiarConversacion(numeroDeTelefono);
     await enviarTexto(numeroDeTelefono,
       'Cancelado. Volvemos al menú.');
-    await mostrarMenuPrincipal(numeroDeTelefono, usuario.nombre);
+    await mostrarMenuPrincipal(numeroDeTelefono, usuario);
     return;
   }
 
@@ -288,7 +290,7 @@ async function confirmarFactura(numeroDeTelefono, textoNorm, usuario) {
 async function procesarMenuPrincipal(numeroDeTelefono, textoNorm, usuario) {
   if (textoNorm === '1') {
     // Nueva factura
-    siguientePaso(numeroDeTelefono, PASOS.FLUJO_CLIENTE);
+    await siguientePaso(numeroDeTelefono, PASOS.FLUJO_CLIENTE);
     await enviarTexto(numeroDeTelefono,
       '📋 Nueva factura.\n\n¿A nombre de quién va?');
     return;

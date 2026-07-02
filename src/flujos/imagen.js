@@ -29,26 +29,26 @@ export default async function procesarImagen(numeroDeTelefono, imagenID, usuario
     if (!datosImagen) {
       await enviarTexto(numeroDeTelefono, MENSAJES.IMAGEN_CONFIANZA_BAJA);
       // Ir a flujo texto manual
-      siguientePaso(numeroDeTelefono, PASOS.FLUJO_CLIENTE, {});
+      await siguientePaso(numeroDeTelefono, PASOS.FLUJO_CLIENTE, {});
       return;
     }
 
     // Guardar datos en conversación
-    guardarDato(numeroDeTelefono, 'razon_social_cliente', datosImagen.razon_social);
-    guardarDato(numeroDeTelefono, 'documento_cliente', datosImagen.documento);
-    guardarDato(numeroDeTelefono, 'concepto', datosImagen.concepto);
-    guardarDato(numeroDeTelefono, 'importe', datosImagen.importe);
+    await guardarDato(numeroDeTelefono, 'razon_social_cliente', datosImagen.razon_social);
+    await guardarDato(numeroDeTelefono, 'documento_cliente', datosImagen.documento);
+    await guardarDato(numeroDeTelefono, 'concepto', datosImagen.concepto);
+    await guardarDato(numeroDeTelefono, 'importe', datosImagen.importe);
 
     // Mostrar confirmación según confianza
     if (datosImagen.confianza === 'alta') {
-      siguientePaso(numeroDeTelefono, PASOS.CONFIRMACION_FACTURA);
+      await siguientePaso(numeroDeTelefono, PASOS.CONFIRMACION_FACTURA);
       await enviarTexto(
         numeroDeTelefono,
         MENSAJES.IMAGEN_CONFIANZA_ALTA(datosImagen)
       );
 
     } else if (datosImagen.confianza === 'media') {
-      siguientePaso(numeroDeTelefono, PASOS.CONFIRMACION_FACTURA);
+      await siguientePaso(numeroDeTelefono, PASOS.CONFIRMACION_FACTURA);
       await enviarTexto(
         numeroDeTelefono,
         MENSAJES.IMAGEN_CONFIANZA_MEDIA(datosImagen)
@@ -57,7 +57,7 @@ export default async function procesarImagen(numeroDeTelefono, imagenID, usuario
     } else {
       // Confianza baja - ir a entrada manual
       await enviarTexto(numeroDeTelefono, MENSAJES.IMAGEN_CONFIANZA_BAJA);
-      siguientePaso(numeroDeTelefono, PASOS.FLUJO_CLIENTE, {});
+      await siguientePaso(numeroDeTelefono, PASOS.FLUJO_CLIENTE, {});
     }
 
   } catch (error) {

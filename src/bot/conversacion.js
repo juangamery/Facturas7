@@ -33,23 +33,24 @@ export const PASOS = {
 };
 
 // Obtener estado actual de conversación
-export function obtenerEstado(numeroDeTelefono) {
-  return obtenerConversacion(numeroDeTelefono);
+// NOTA: obtenerConversacion es async (Supabase) → esta función también.
+export async function obtenerEstado(numeroDeTelefono) {
+  return await obtenerConversacion(numeroDeTelefono);
 }
 
 // Ir al siguiente paso
-export function siguientePaso(numeroDeTelefono, nuevoPaso, datos = {}) {
-  guardarConversacion(numeroDeTelefono, nuevoPaso, datos);
+export async function siguientePaso(numeroDeTelefono, nuevoPaso, datos = {}) {
+  await guardarConversacion(numeroDeTelefono, nuevoPaso, datos);
   logger.debug(`Paso actualizado: ${numeroDeTelefono} → ${nuevoPaso}`);
 }
 
 // Guardar dato en conversación actual
-export function guardarDato(numeroDeTelefono, clave, valor) {
-  const conversacion = obtenerConversacion(numeroDeTelefono);
+export async function guardarDato(numeroDeTelefono, clave, valor) {
+  const conversacion = await obtenerConversacion(numeroDeTelefono);
   const datos = conversacion?.datos ? JSON.parse(conversacion.datos) : {};
 
   datos[clave] = valor;
-  guardarConversacion(
+  await guardarConversacion(
     numeroDeTelefono,
     conversacion?.paso || PASOS.MENU_PRINCIPAL,
     datos
@@ -57,8 +58,8 @@ export function guardarDato(numeroDeTelefono, clave, valor) {
 }
 
 // Obtener dato de conversación
-export function obtenerDato(numeroDeTelefono, clave) {
-  const conversacion = obtenerConversacion(numeroDeTelefono);
+export async function obtenerDato(numeroDeTelefono, clave) {
+  const conversacion = await obtenerConversacion(numeroDeTelefono);
   if (!conversacion) return null;
 
   const datos = JSON.parse(conversacion.datos);
@@ -66,8 +67,8 @@ export function obtenerDato(numeroDeTelefono, clave) {
 }
 
 // Limpiar conversación
-export function limpiarConversacion(numeroDeTelefono) {
-  borrarConversacion(numeroDeTelefono);
+export async function limpiarConversacion(numeroDeTelefono) {
+  await borrarConversacion(numeroDeTelefono);
   logger.info(`Conversación limpiada: ${numeroDeTelefono}`);
 }
 
@@ -77,7 +78,7 @@ export function limpiarConversacion(numeroDeTelefono) {
 
 export async function iniciarOnboarding(numeroDeTelefono) {
   try {
-    siguientePaso(numeroDeTelefono, PASOS.ONBOARDING_CUIT);
+    await siguientePaso(numeroDeTelefono, PASOS.ONBOARDING_CUIT);
     await enviarTexto(numeroDeTelefono, MENSAJES.BIENVENIDA_ONBOARDING);
   } catch (error) {
     logger.error(`Error iniciando onboarding: ${error.message}`);
@@ -90,7 +91,7 @@ export async function iniciarOnboarding(numeroDeTelefono) {
 
 export async function iniciarFlujoFactura(numeroDeTelefono) {
   try {
-    siguientePaso(numeroDeTelefono, PASOS.FLUJO_CLIENTE, {});
+    await siguientePaso(numeroDeTelefono, PASOS.FLUJO_CLIENTE, {});
     await enviarTexto(numeroDeTelefono, MENSAJES.PREGUNTA_CLIENTE);
   } catch (error) {
     logger.error(`Error iniciando flujo: ${error.message}`);
@@ -112,7 +113,7 @@ export async function mostrarMenuPrincipal(numeroDeTelefono, usuario) {
     }
 
     // Si tiene datos completos, mostrar menú
-    siguientePaso(numeroDeTelefono, PASOS.MENU_PRINCIPAL);
+    await siguientePaso(numeroDeTelefono, PASOS.MENU_PRINCIPAL);
     await enviarTexto(
       numeroDeTelefono,
       MENSAJES.MENU_PRINCIPAL(nombreUsuario)

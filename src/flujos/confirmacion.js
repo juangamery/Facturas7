@@ -27,7 +27,7 @@ const __dirname = path.dirname(__filename);
 export default async function emitirFactura(numeroDeTelefono, usuario) {
   try {
     // Obtener datos de conversación
-    const conversacion = obtenerEstado(numeroDeTelefono);
+    const conversacion = await obtenerEstado(numeroDeTelefono);
     if (!conversacion) {
       await enviarTexto(numeroDeTelefono, MENSAJES.ERROR_GENERICO);
       return;
@@ -122,7 +122,7 @@ export default async function emitirFactura(numeroDeTelefono, usuario) {
     );
 
     // Limpiar conversación
-    limpiarConversacion(numeroDeTelefono);
+    await limpiarConversacion(numeroDeTelefono);
 
     // Mostrar menú principal de nuevo
     await mostrarMenuPrincipal(numeroDeTelefono, usuario);
@@ -136,6 +136,6 @@ export default async function emitirFactura(numeroDeTelefono, usuario) {
     await enviarTexto(numeroDeTelefono, MENSAJES.ERROR_EMITIR);
 
     // Limpiar conversación para que vuelva a intentar
-    limpiarConversacion(numeroDeTelefono);
+    await limpiarConversacion(numeroDeTelefono);
   }
 }
