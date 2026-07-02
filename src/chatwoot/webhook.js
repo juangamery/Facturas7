@@ -1,9 +1,27 @@
+import crypto from 'crypto';
 import { logger } from '../logger.js';
 import { enviarPorEvolution } from '../evolution/webhook.js';
+
+const CHATWOOT_SECRET = process.env.CHATWOOT_WEBHOOK_SECRET;
+
+function validarSignature(req) {
+  const signature = req.headers['x-chatwoot-api-signature'];
+  if (!signature) return false;
+
+  const body = JSON.stringify(req.body);
+  const hash = crypto.createHmac('sha256', CHATWOOT_SECRET).update(body).digest('hex');
+  return hash === signature;
+}
 
 export async function handleChatwootWebhook(req, res) {
   try {
     logger.info('📨 Webhook Chatwoot recibido');
+
+    if (!validarSignature(req)) {
+      logger.warn('⚠️ Signature inválida - rechazando webhook');
+      return res.status(401).json({ error: 'Invalid signature' });
+    }
+
     logger.debug(`Payload: ${JSON.stringify(req.body).substring(0, 300)}`);
 
     const { event, data } = req.body;
