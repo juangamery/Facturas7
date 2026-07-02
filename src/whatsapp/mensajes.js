@@ -9,37 +9,41 @@ import path from 'path';
 import https from 'https';
 
 const WAPPFLY_TOKEN = process.env.WAPPFLY_TOKEN;
-const WAPPFLY_API_BASE = 'https://api.wappfly.com/v1';
+const WAPPFLY_API_BASE = 'https://wappfly.com/api';
+
+// Normalizar número a formato JID
+function formatearJID(numero) {
+  const limpio = numero.replace(/\D/g, '');
+  return `${limpio}@s.whatsapp.net`;
+}
 
 // ==========================================
 // ENVIAR TEXTO
 // ==========================================
-// Endpoint: POST /messages/text
-// Envía un mensaje de texto a un número WhatsApp
 
 export async function enviarTexto(numero, texto) {
   try {
     logger.info(`📤 Enviando texto a ${numero} via Wappfly`);
 
-    const respuesta = await fetch(`${WAPPFLY_API_BASE}/messages/text`, {
+    const respuesta = await fetch(`${WAPPFLY_API_BASE}/messages/send`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${WAPPFLY_TOKEN}`,
+        'X-API-Token': WAPPFLY_TOKEN,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        to: numero,
+        to: formatearJID(numero),
         text: texto
       })
     });
 
     if (!respuesta.ok) {
       const error = await respuesta.json();
-      throw new Error(`Wappfly error: ${error.message || respuesta.statusText}`);
+      throw new Error(`Wappfly error: ${error.error || respuesta.statusText}`);
     }
 
     const data = await respuesta.json();
-    logger.info(`✅ Mensaje enviado. ID: ${data.messageId || data.id}`);
+    logger.info(`✅ Mensaje enviado. ID: ${data.msg_id}`);
     return data;
 
   } catch (error) {
@@ -51,9 +55,6 @@ export async function enviarTexto(numero, texto) {
 // ==========================================
 // ENVIAR DOCUMENTO (PDF)
 // ==========================================
-// Endpoint: POST /messages/document
-// Envía un PDF a un número WhatsApp
-// Soporta tanto base64 como URL
 
 export async function enviarDocumento(numero, pdfPath, nombreArchivo) {
   try {
@@ -66,23 +67,24 @@ export async function enviarDocumento(numero, pdfPath, nombreArchivo) {
     const respuesta = await fetch(`${WAPPFLY_API_BASE}/messages/document`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${WAPPFLY_TOKEN}`,
+        'X-API-Token': WAPPFLY_TOKEN,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        to: numero,
-        document: base64,
+        to: formatearJID(numero),
+        file: base64,
+        mimetype: 'application/pdf',
         filename: nombreArchivo
       })
     });
 
     if (!respuesta.ok) {
       const error = await respuesta.json();
-      throw new Error(`Wappfly error: ${error.message || respuesta.statusText}`);
+      throw new Error(`Wappfly error: ${error.error || respuesta.statusText}`);
     }
 
     const data = await respuesta.json();
-    logger.info(`✅ Documento enviado. ID: ${data.messageId || data.id}`);
+    logger.info(`✅ Documento enviado. ID: ${data.msg_id}`);
     return data;
 
   } catch (error) {
@@ -92,54 +94,68 @@ export async function enviarDocumento(numero, pdfPath, nombreArchivo) {
 }
 
 // ==========================================
-// ENVIAR DOCUMENTO POR URL
+// ENVIAR IMAGEN
 // ==========================================
-// Alternativa: enviar documento desde URL
 
-export async function enviarDocumentoURL(numero, urlDocumento, nombreArchivo) {
+export async function enviarImagen(numero, urlImagen) {
   try {
-    logger.info(`📄 Enviando documento desde URL a ${numero} via Wappfly`);
+    logger.info(`🖼️ Enviando imagen a ${numero} via Wappfly`);
 
-    const respuesta = await fetch(`${WAPPFLY_API_BASE}/messages/document`, {
+    // Descargar imagen y convertir a base64
+    const imageBuffer = await descargarBuffer(urlImagen);
+    const base64 = imageBuffer.toString('base64');
+
+    const respuesta = await fetch(`${WAPPFLY_API_BASE}/messages/image`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${WAPPFLY_TOKEN}`,
+        'X-API-Token': WAPPFLY_TOKEN,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        to: numero,
-        url: urlDocumento,
-        filename: nombreArchivo
+        to: formatearJID(numero),
+        file: base64,
+        mimetype: 'image/jpeg'
       })
     });
 
     if (!respuesta.ok) {
       const error = await respuesta.json();
-      throw new Error(`Wappfly error: ${error.message || respuesta.statusText}`);
+      throw new Error(`Wappfly error: ${error.error || respuesta.statusText}`);
     }
 
     const data = await respuesta.json();
-    logger.info(`✅ Documento enviado. ID: ${data.messageId || data.id}`);
+    logger.info(`✅ Imagen enviada. ID: ${data.msg_id}`);
     return data;
 
   } catch (error) {
-    logearError(error, `Envío de documento URL a ${numero}`);
+    logearError(error, `Envío de imagen a ${numero}`);
     throw error;
   }
 }
 
 // ==========================================
+// DESCARGAR BUFFER (helper)
+// ==========================================
+
+function descargarBuffer(urlMedia) {
+  return new Promise((resolve, reject) => {
+    https.get(urlMedia, (response) => {
+      const chunks = [];
+      response.on('data', chunk => chunks.push(chunk));
+      response.on('end', () => resolve(Buffer.concat(chunks)));
+    }).on('error', reject);
+  });
+}
+
+// ==========================================
 // DESCARGAR MEDIA
 // ==========================================
-// Descarga imágenes y audios que llegan via webhook
-// Wappfly proporciona mediaUrl en el payload del webhook
 
 export async function descargarMedia(mediaUrl, nombreArchivo) {
   return new Promise((resolve, reject) => {
     try {
       logger.info(`⬇️ Descargando media de ${mediaUrl}`);
 
-      // Asegurar que existe el directorio
       const dirMedia = path.join(process.cwd(), 'media');
       if (!fs.existsSync(dirMedia)) {
         fs.mkdirSync(dirMedia, { recursive: true });
@@ -156,7 +172,7 @@ export async function descargarMedia(mediaUrl, nombreArchivo) {
           resolve(rutaLocal);
         });
       }).on('error', (err) => {
-        fs.unlink(rutaLocal, () => {}); // Eliminar archivo en caso de error
+        fs.unlink(rutaLocal, () => {});
         reject(err);
       });
 
@@ -165,41 +181,4 @@ export async function descargarMedia(mediaUrl, nombreArchivo) {
       reject(error);
     }
   });
-}
-
-// ==========================================
-// ENVIAR IMAGEN
-// ==========================================
-// Endpoint: POST /messages/image
-// Envía una imagen a un número WhatsApp
-
-export async function enviarImagen(numero, urlImagen) {
-  try {
-    logger.info(`🖼️ Enviando imagen a ${numero} via Wappfly`);
-
-    const respuesta = await fetch(`${WAPPFLY_API_BASE}/messages/image`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${WAPPFLY_TOKEN}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        to: numero,
-        image: urlImagen
-      })
-    });
-
-    if (!respuesta.ok) {
-      const error = await respuesta.json();
-      throw new Error(`Wappfly error: ${error.message || respuesta.statusText}`);
-    }
-
-    const data = await respuesta.json();
-    logger.info(`✅ Imagen enviada. ID: ${data.messageId || data.id}`);
-    return data;
-
-  } catch (error) {
-    logearError(error, `Envío de imagen a ${numero}`);
-    throw error;
-  }
 }
