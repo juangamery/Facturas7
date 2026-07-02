@@ -75,36 +75,30 @@ export default async function webhookHandler(req, res) {
 
 async function procesarMensajeWappfly(numero, tipo, data) {
   try {
-    let contenido = '';
-    let tipoContenido = 'texto';
+    let mensaje = {
+      from: numero,
+      id: data.messageId,
+      type: tipo,
+      timestamp: data.timestamp
+    };
 
-    // Extraer contenido según tipo de mensaje
+    // Adaptar estructura según tipo (compatible con bot.js)
     if (tipo === 'text') {
-      contenido = data.text || '';
-      tipoContenido = 'texto';
+      mensaje.text = { body: data.text || '' };
+      logger.info(`✅ Procesando texto de ${numero}`);
     } else if (tipo === 'image') {
-      contenido = data.mediaUrl || '';
-      tipoContenido = 'imagen';
+      mensaje.image = { id: data.mediaUrl };
+      logger.info(`✅ Procesando imagen de ${numero}`);
     } else if (tipo === 'audio') {
-      contenido = data.mediaUrl || '';
-      tipoContenido = 'audio';
+      mensaje.audio = { id: data.mediaUrl };
+      logger.info(`✅ Procesando audio de ${numero}`);
     } else {
-      logger.warn(`Tipo de mensaje desconocido: ${tipo}`);
+      logger.warn(`Tipo desconocido: ${tipo}`);
       return;
     }
 
-    logger.info(`✅ Procesando mensaje [${tipoContenido}] de ${numero}`);
-
-    // Llamar al procesador general (mismo que Meta)
-    // Estructura compatible: { from, type, content }
-    await procesarMensaje({
-      from: numero,
-      type: tipo,
-      content: contenido,
-      mediaUrl: data.mediaUrl,
-      messageId: data.messageId,
-      timestamp: data.timestamp
-    });
+    // Llamar bot.js con estructura compatible Meta
+    await procesarMensaje(mensaje);
 
   } catch (error) {
     logearError(error, `Procesamiento mensaje Wappfly`);

@@ -7,7 +7,7 @@
 // 4. Maneja la máquina de estados de conversación
 
 import { verificarAcceso, enviarMensajeDeAccesoDenegado } from './acceso.js';
-import { enviarMensajePorMeta } from './webhook.js';
+import { enviarTexto } from '../whatsapp/mensajes.js';
 import { MENSAJES } from './plantillas.js';
 import { logger, logearError } from '../logger.js';
 import { obtenerEstado } from './conversacion.js';
@@ -62,14 +62,14 @@ export default async function procesarMensaje(mensaje, phoneID, displayPhoneNumb
     } else {
       // Tipo de mensaje no soportado
       logger.warn(`Tipo de mensaje no soportado: ${mensaje.type}`);
-      await enviarMensajePorMeta(numeroDeTelefono,
+      await enviarTexto(numeroDeTelefono,
         'Ese tipo de mensaje no lo entiendo. Mandá texto, imagen o audio.');
     }
 
   } catch (error) {
     logearError(error, `Procesamiento de mensaje ${messageID}`);
     try {
-      await enviarMensajePorMeta(numeroDeTelefono, MENSAJES.ERROR_GENERICO);
+      await enviarTexto(numeroDeTelefono, MENSAJES.ERROR_GENERICO);
     } catch (e) {
       logger.error(`Error enviando mensaje de error: ${e.message}`);
     }
@@ -93,7 +93,7 @@ async function procesarTextoGenerico(numeroDeTelefono, texto, usuario) {
   if (textoNormalizado === 'CANCELAR') {
     const { limpiarConversacion } = await import('./conversacion.js');
     limpiarConversacion(numeroDeTelefono);
-    await enviarMensajePorMeta(numeroDeTelefono, MENSAJES.CANCELADO);
+    await enviarTexto(numeroDeTelefono, MENSAJES.CANCELADO);
     return;
   }
 
@@ -106,7 +106,7 @@ async function procesarImagenGenerico(numeroDeTelefono, imagenID, usuario) {
   try {
     // Verificar si Claude Vision está disponible
     if (!process.env.ANTHROPIC_API_KEY) {
-      await enviarMensajePorMeta(
+      await enviarTexto(
         numeroDeTelefono,
         '📸 Por el momento no puedo interpretar imágenes. Por favor escribí los datos manualmente o mandá un audio.'
       );
@@ -118,18 +118,18 @@ async function procesarImagenGenerico(numeroDeTelefono, imagenID, usuario) {
 
   } catch (error) {
     logearError(error, `Procesamiento imagen ${imagenID}`);
-    await enviarMensajePorMeta(numeroDeTelefono, MENSAJES.ERROR_GENERICO);
+    await enviarTexto(numeroDeTelefono, MENSAJES.ERROR_GENERICO);
   }
 }
 
 async function procesarAudioGenerico(numeroDeTelefono, audioID, usuario) {
   try {
-    await enviarMensajePorMeta(numeroDeTelefono, MENSAJES.ANALIZANDO_AUDIO);
+    await enviarTexto(numeroDeTelefono, MENSAJES.ANALIZANDO_AUDIO);
 
     const audioResultado = await procesarAudio(audioID);
 
     if (!audioResultado) {
-      await enviarMensajePorMeta(numeroDeTelefono, MENSAJES.ERROR_GENERICO);
+      await enviarTexto(numeroDeTelefono, MENSAJES.ERROR_GENERICO);
       return;
     }
 
@@ -140,7 +140,7 @@ async function procesarAudioGenerico(numeroDeTelefono, audioID, usuario) {
     guardarDato(numeroDeTelefono, 'importe', audioResultado.datos?.importe);
     siguientePaso(numeroDeTelefono, PASOS.CONFIRMACION_FACTURA);
 
-    await enviarMensajePorMeta(
+    await enviarTexto(
       numeroDeTelefono,
       MENSAJES.AUDIO_TRANSCRIBIDO(audioResultado.datos, audioResultado.transcripcion)
     );
@@ -149,6 +149,6 @@ async function procesarAudioGenerico(numeroDeTelefono, audioID, usuario) {
 
   } catch (error) {
     logearError(error, `Procesamiento audio ${audioID}`);
-    await enviarMensajePorMeta(numeroDeTelefono, MENSAJES.ERROR_GENERICO);
+    await enviarTexto(numeroDeTelefono, MENSAJES.ERROR_GENERICO);
   }
 }
