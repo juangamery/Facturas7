@@ -153,11 +153,14 @@ export async function borrarConversacion(numeroDeTelefono) {
 }
 
 export async function yaProcesado(messageID) {
+  // BUGFIX: la tabla NO tiene columna 'id', solo 'message_id' y 'procesado_en'.
+  // .select('id') daba error 400 → data null → siempre false → loop infinito.
+  // .maybeSingle() evita error PGRST116 cuando no hay filas.
   const { data } = await getDB()
     .from('mensajes_procesados')
-    .select('id')
+    .select('message_id')
     .eq('message_id', messageID)
-    .single();
+    .maybeSingle();
   return !!data;
 }
 

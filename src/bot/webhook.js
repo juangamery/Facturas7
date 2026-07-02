@@ -91,6 +91,10 @@ export function iniciarPolling() {
 // SIN responder. Evita replay de mensajes viejos y gasto de quota.
 let seedListo = false;
 
+// Dedup en memoria: inmune a fallos de la DB. Evita loops si yaProcesado
+// falla por cualquier motivo (RLS, columna, red). Se limpia al reiniciar.
+const procesadosMem = new Set();
+
 async function ejecutarPoll() {
   try {
     logger.debug(`🔵 Polling... (${new Date().toISOString()})`);
@@ -135,7 +139,9 @@ async function ejecutarPoll() {
     if (!seedListo) {
       let sembrados = 0;
       for (const msg of mensajes) {
-        if (msg.msg_id && !(await yaProcesado(msg.msg_id))) {
+        if (!msg.msg_id) continue;
+        procesadosMem.add(msg.msg_id);
+        if (!(await yaProcesado(msg.msg_id))) {
           await marcarComoProcesado(msg.msg_id);
           sembrados++;
         }
@@ -150,7 +156,11 @@ async function ejecutarPoll() {
       if (msg.from_me === 1) continue;  // Skip outbound
       if (!msg.msg_id) continue;
 
-      // BUGFIX: yaProcesado/marcarComoProcesado son async → hay que await
+      // Dedup en memoria PRIMERO (inmune a fallos de DB) → corta cualquier loop.
+      if (procesadosMem.has(msg.msg_id)) continue;
+      procesadosMem.add(msg.msg_id);
+
+      // Dedup en DB (persiste entre reinicios).
       if (await yaProcesado(msg.msg_id)) continue;
       await marcarComoProcesado(msg.msg_id);
 

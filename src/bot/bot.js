@@ -97,6 +97,15 @@ async function procesarTextoGenerico(numeroDeTelefono, texto, usuario) {
     return;
   }
 
+  // Primer contacto (sin conversación previa): mostrar menú / iniciar onboarding.
+  // mostrarMenuPrincipal detecta si falta CUIT/punto_venta → arranca onboarding.
+  if (!conversacion) {
+    const { mostrarMenuPrincipal } = await import('./conversacion.js');
+    await mostrarMenuPrincipal(numeroDeTelefono, usuario);
+    logger.info(`👋 Primer contacto de ${numeroDeTelefono} → menú/onboarding`);
+    return;
+  }
+
   // Llamar a procesarTexto
   await procesarTexto(numeroDeTelefono, texto, usuario, paso, datos);
   logger.info(`📝 Texto recibido (paso: ${paso}): ${texto.substring(0, 50)}`);
