@@ -1,71 +1,93 @@
 // ==========================================
-// WEBHOOK DE WHATSAPP - Recibe mensajes de Wappfly
+// WEBHOOK DE WHATSAPP - Polling de mensajes Wappfly
 // ==========================================
 // Este archivo:
-// 1. Recibe webhooks de Wappfly (POST solamente)
-// 2. Deduplica mensajes (para no procesar dos veces el mismo)
-// 3. Detecta tipo de mensaje (text, image, audio)
-// 4. Llama al handler correspondiente
+// 1. Polling cada 5 segundos a Wappfly API
+// 2. Obtiene mensajes nuevos
+// 3. Deduplica mensajes (para no procesar dos veces el mismo)
+// 4. Detecta tipo de mensaje (text, image, audio)
+// 5. Llama al handler correspondiente
 
 import { logger, logearError } from '../logger.js';
 import { marcarComoProcesado, yaProcesado } from '../db.js';
 import procesarMensaje from './bot.js';
 
-// ==========================================
-// WEBHOOK DE WAPPFLY
-// ==========================================
-// Wappfly hace POST con este formato:
-// {
-//   "event": "message",
-//   "data": {
-//     "from": "5493764XXXXXX",
-//     "type": "text|image|audio",
-//     "text": "contenido" (solo para text),
-//     "mediaUrl": "https://..." (para image/audio),
-//     "messageId": "XXXXX",
-//     "timestamp": 1234567890
-//   }
-// }
+const WAPPFLY_TOKEN = process.env.WAPPFLY_TOKEN;
+const WAPPFLY_BASE_URL = 'https://wappfly.com/api';
+const POLL_INTERVAL = 5000; // 5 segundos
 
+// Endpoint para recibir webhooks (compatibilidad)
 export default async function webhookHandler(req, res) {
-  // Wappfly solo usa POST, no GET
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Solo POST permitido' });
+  // GET: health check
+  if (req.method === 'GET') {
+    return res.status(200).json({ status: 'polling', polling: true });
   }
 
-  try {
-    // Responder rápido a Wappfly (< 100ms)
+  // POST: podría recibir webhook si Wappfly lo envía
+  if (req.method === 'POST') {
     res.status(200).json({ received: true });
-
     const { event, data } = req.body;
-
-    // Solo procesar eventos de mensaje
-    if (event !== 'message' || !data) {
-      logger.debug(`Evento ignorado: ${event}`);
-      return;
+    if (event === 'message' && data) {
+      procesarMensajeWappfly(data.from, data.type, data).catch(error => {
+        logearError(error, `Procesamiento mensaje POST`);
+      });
     }
+    return;
+  }
 
-    const { from, type, messageId } = data;
+  res.status(405).json({ error: 'Método no permitido' });
+}
 
-    // Deduplicar: verificar si ya procesamos este mensaje
-    if (yaProcesado(messageId)) {
-      logger.debug(`Mensaje duplicado ignorado: ${messageId}`);
-      return;
-    }
+// ==========================================
+// POLLING - Obtener mensajes de Wappfly cada 5s
+// ==========================================
 
-    // Marcar como procesado para evitar duplicados
-    marcarComoProcesado(messageId);
+export function iniciarPolling() {
+  logger.info('🔄 Iniciando polling de Wappfly...');
+  setInterval(obtenerMensajesWappfly, POLL_INTERVAL);
+  // Primera ejecución inmediata
+  obtenerMensajesWappfly();
+}
 
-    logger.info(`📨 Mensaje Wappfly: de ${from} tipo=${type} id=${messageId}`);
-
-    // Procesar en background (no esperar respuesta)
-    procesarMensajeWappfly(from, type, data).catch(error => {
-      logearError(error, `Procesamiento mensaje ${messageId}`);
+async function obtenerMensajesWappfly() {
+  try {
+    const response = await fetch(`${WAPPFLY_BASE_URL}/messages/recent`, {
+      method: 'GET',
+      headers: {
+        'X-API-Token': WAPPFLY_TOKEN,
+        'Content-Type': 'application/json'
+      }
     });
 
+    if (!response.ok) {
+      logger.warn(`Wappfly API error: ${response.status}`);
+      return;
+    }
+
+    const datos = await response.json();
+    const mensajes = datos.data || datos.messages || [];
+
+    if (mensajes.length === 0) return;
+
+    logger.debug(`📥 ${mensajes.length} mensajes en Wappfly`);
+
+    for (const msg of mensajes) {
+      const messageId = msg.messageId || msg.id || msg.wamid;
+
+      // Deduplicar
+      if (yaProcesado(messageId)) continue;
+      marcarComoProcesado(messageId);
+
+      logger.info(`📨 Mensaje Wappfly: de ${msg.from} tipo=${msg.type} id=${messageId}`);
+
+      // Procesar en background
+      procesarMensajeWappfly(msg.from, msg.type, msg).catch(error => {
+        logearError(error, `Procesamiento polling ${messageId}`);
+      });
+    }
+
   } catch (error) {
-    logearError(error, 'Webhook Wappfly');
-    // Ya respondimos 200, solo loguear
+    logger.error(`Error polling Wappfly: ${error.message}`);
   }
 }
 

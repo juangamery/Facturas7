@@ -20,7 +20,7 @@ import { fileURLToPath } from 'url';
 import { inicializarDB, limpiarDatos, getDB, actualizarUsuario } from './db.js';
 import { initLocalDB } from './db-local.js';
 import { logger } from './logger.js';
-import webhookWhatsApp from './bot/webhook.js';
+import webhookWhatsApp, { iniciarPolling } from './bot/webhook.js';
 import adminRoutes from './admin/routes.js';
 import { handleMercadoPagoWebhook } from './mercadopago/webhook.js';
 import { inicializarMailer } from './email/mailer.js';
@@ -121,12 +121,14 @@ async function iniciar() {
     //   logger.warn(`Email service no disponible: ${error.message}`);
     // }
 
-    // 6. Iniciar servidor Express
+    // 6. Iniciar polling de Wappfly
+    iniciarPolling();
+
+    // 7. Iniciar servidor Express
     app.listen(PORT, () => {
       logger.info(`🚀 Servidor corriendo en ${BASE_URL}`);
       logger.info(`📊 Panel admin: ${BASE_URL}/admin/login`);
-      logger.info(`⚡ Webhook Meta: ${BASE_URL}/webhooks/whatsapp`);
-      logger.info(`📨 Webhook Evolution: ${BASE_URL}/webhooks/evolution`);
+      logger.info(`⚡ Webhook Wappfly: ${BASE_URL}/webhooks/whatsapp`);
       logger.info(`💳 Webhook MP: ${BASE_URL}/webhooks/mercadopago`);
       logger.info(`📈 Health check: ${BASE_URL}/health`);
     });
