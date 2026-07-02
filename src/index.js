@@ -23,8 +23,6 @@ import { logger } from './logger.js';
 import webhookWhatsApp from './bot/webhook.js';
 import adminRoutes from './admin/routes.js';
 import { handleMercadoPagoWebhook } from './mercadopago/webhook.js';
-import { handleEvolutionWebhook } from './evolution/webhook.js';
-import { handleChatwootWebhook } from './chatwoot/webhook.js';
 import { inicializarMailer } from './email/mailer.js';
 import { inicializarReceiver } from './email/receiver.js';
 
@@ -62,14 +60,6 @@ app.set('view cache', false);
 // POST: todos los mensajes que recibe Meta
 app.get('/webhooks/whatsapp', webhookWhatsApp);
 app.post('/webhooks/whatsapp', webhookWhatsApp);
-
-// Webhook de Evolution API (POST /webhooks/evolution)
-// Evolution manda acá todos los mensajes WhatsApp
-app.post('/webhooks/evolution', handleEvolutionWebhook);
-
-// Webhook de Chatwoot (POST /webhooks/chatwoot)
-// Chatwoot manda acá respuestas de agentes → se envían por Evolution
-app.post('/webhooks/chatwoot', handleChatwootWebhook);
 
 // Webhook de Mercado Pago (POST /webhooks/mercadopago)
 // MP manda acá eventos de pagos aprobados, rechazados, etc
