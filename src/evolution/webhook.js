@@ -94,6 +94,7 @@ export async function enviarPorEvolution(numeroWhatsapp, mensaje) {
         const headerName = Object.keys(headers)[0];
 
         logger.info(`🔄 Intento ${i+1}: ${headerName}`);
+        logger.debug(`Header value: ${headers[headerName].substring(0, 30)}...`);
 
         response = await axios.post(url, payload, {
           headers,
@@ -101,20 +102,31 @@ export async function enviarPorEvolution(numeroWhatsapp, mensaje) {
           validateStatus: () => true
         });
 
-        logger.info(`Status ${response.status}`);
+        logger.info(`📊 Status ${response.status}`);
+        logger.debug(`Response headers: ${JSON.stringify(response.headers)}`);
+        logger.debug(`Response body: ${JSON.stringify(response.data).substring(0, 500)}`);
 
         if (response.status >= 200 && response.status < 300) {
           logger.info(`✅ ÉXITO con ${headerName}`);
           return response.data;
+        } else if (response.status === 401) {
+          logger.warn(`⚠️ 401 Unauthorized - posible: token inválido, permisos faltantes, o token expirado`);
         }
 
         response = null;
       } catch (err) {
         logger.warn(`Intento ${i+1} error: ${err.message}`);
+        if (err.response) {
+          logger.warn(`Error status: ${err.response.status}`);
+          logger.warn(`Error data: ${JSON.stringify(err.response.data).substring(0, 300)}`);
+        }
       }
     }
 
     logger.error(`❌ Todos los headers fallaron`);
+    logger.error(`URL probada: ${url}`);
+    logger.error(`Instance: ${EVOLUTION_INSTANCE}`);
+    logger.error(`Token (primeros 10): ${EVOLUTION_TOKEN.substring(0, 10)}...`);
     return { error: 'Auth failed with all headers' };
 
   } catch (error) {
