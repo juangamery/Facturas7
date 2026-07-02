@@ -84,6 +84,10 @@ async function obtenerMensajesWappfly() {
       // Extraer número sin @s.whatsapp.net
       const numeroCompleto = msg.sender_jid || msg.chat_jid || '';
       const numero = numeroCompleto.split('@')[0];
+      if (!numero) {
+        logger.warn(`Mensaje sin número: ${messageId}`);
+        continue;
+      }
 
       logger.info(`📨 Mensaje Wappfly: de ${numero} tipo=${msg.type} id=${messageId}`);
 
