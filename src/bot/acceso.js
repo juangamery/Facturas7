@@ -8,7 +8,7 @@
 
 import { obtenerUsuario } from '../db.js';
 import { logger } from '../logger.js';
-import { enviarMensajePorMeta } from './webhook.js';
+import { enviarTexto } from '../whatsapp/mensajes.js';
 import { MENSAJES } from './plantillas.js';
 
 export async function verificarAcceso(numeroDeTelefono) {
@@ -68,7 +68,7 @@ export async function verificarAcceso(numeroDeTelefono) {
 
 export async function enviarMensajeDeAccesoDenegado(numeroDeTelefono, razon, mensaje) {
   try {
-    await enviarMensajePorMeta(numeroDeTelefono, mensaje);
+    await enviarTexto(numeroDeTelefono, mensaje);
     logger.info(`Acceso denegado a ${numeroDeTelefono}: ${razon}`);
   } catch (error) {
     logger.error(`Error enviando mensaje de acceso denegado: ${error.message}`);
