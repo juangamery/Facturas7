@@ -22,7 +22,7 @@ if (!fs.existsSync(FACTURAS_DIR)) {
 
 export async function generarPDFFactura(datosFact) {
   try {
-    const nombreArchivo = `Factura_${datosFact.numero_factura.replace(/-/g, '_')}_${Date.now()}.pdf`;
+    const nombreArchivo = `Factura_${String(datosFact.numero_factura).replace(/-/g, '_')}_${Date.now()}.pdf`;
     const rutaArchivo = path.join(FACTURAS_DIR, nombreArchivo);
 
     // Crear documento PDF
@@ -114,7 +114,7 @@ function generarQRData(datosFact) {
     cuit: parseInt(datosFact.cuit_emisor.replace(/-/g, '')),
     ptoVta: datosFact.punto_venta,
     tipoCmp: getTipoComprobante(datosFact.tipo_comprobante),
-    nroCmp: parseInt(datosFact.numero_factura.split('-')[1]),
+    nroCmp: parseInt(datosFact.numero_factura),
     importe: datosFact.importe,
     moneda: 'PES',
     ctz: 1,
