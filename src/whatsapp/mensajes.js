@@ -1,25 +1,24 @@
 // ==========================================
-// INTEGRACIÓN WAPPFLY - Envío de mensajes
+// INTEGRACIÓN META CLOUD API - Envío de mensajes
 // ==========================================
-// Funciones para enviar mensajes y descargar media desde Wappfly
+// Envío de texto, documentos (PDF) e imágenes vía WhatsApp Cloud API (Meta).
+// Reemplaza la capa Wappfly. Mantiene las mismas firmas de export.
 
 import { logger, logearError } from '../logger.js';
 import fs from 'fs';
 import path from 'path';
 import https from 'https';
+import FormData from 'form-data';
 
-const WAPPFLY_TOKEN = process.env.WAPPFLY_TOKEN;
-const WAPPFLY_API_BASE = 'https://wappfly.com/api';
+const TOKEN = process.env.WHATSAPP_TOKEN;
+const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
+const API_VERSION = process.env.WHATSAPP_API_VERSION || 'v21.0';
+const GRAPH_BASE = `https://graph.facebook.com/${API_VERSION}`;
 
-// Normalizar a formato JID.
-// Si ya viene con @ (ej: 161027048095914@lid o 549...@s.whatsapp.net),
-// se usa tal cual — así respondemos al mismo chat del que vino el mensaje.
-function formatearJID(numero) {
-  if (typeof numero === 'string' && numero.includes('@')) {
-    return numero;
-  }
-  const limpio = String(numero).replace(/\D/g, '');
-  return `${limpio}@s.whatsapp.net`;
+// Meta espera el número en formato E.164 SOLO dígitos (ej: 5493764217673),
+// sin '+', sin @s.whatsapp.net, sin @lid. El webhook entrega 'from' así.
+function formatearNumero(numero) {
+  return String(numero).replace(/@.*$/, '').replace(/\D/g, '');
 }
 
 // ==========================================
@@ -28,27 +27,29 @@ function formatearJID(numero) {
 
 export async function enviarTexto(numero, texto) {
   try {
-    logger.info(`📤 Enviando texto a ${numero} via Wappfly`);
+    const to = formatearNumero(numero);
+    logger.info(`📤 Enviando texto a ${to} via Meta`);
 
-    const respuesta = await fetch(`${WAPPFLY_API_BASE}/messages/send`, {
+    const respuesta = await fetch(`${GRAPH_BASE}/${PHONE_NUMBER_ID}/messages`, {
       method: 'POST',
       headers: {
-        'X-API-Token': WAPPFLY_TOKEN,
+        'Authorization': `Bearer ${TOKEN}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        to: formatearJID(numero),
-        text: texto
+        messaging_product: 'whatsapp',
+        to,
+        type: 'text',
+        text: { body: texto }
       })
     });
 
+    const data = await respuesta.json();
     if (!respuesta.ok) {
-      const error = await respuesta.json();
-      throw new Error(`Wappfly error: ${error.error || respuesta.statusText}`);
+      throw new Error(`Meta error: ${data.error?.message || respuesta.statusText}`);
     }
 
-    const data = await respuesta.json();
-    logger.info(`✅ Mensaje enviado. ID: ${data.msg_id}`);
+    logger.info(`✅ Mensaje enviado. ID: ${data.messages?.[0]?.id}`);
     return data;
 
   } catch (error) {
@@ -58,38 +59,63 @@ export async function enviarTexto(numero, texto) {
 }
 
 // ==========================================
+// SUBIR MEDIA (helper) → retorna media_id
+// ==========================================
+
+async function subirMedia(buffer, mimetype, filename) {
+  const form = new FormData();
+  form.append('messaging_product', 'whatsapp');
+  form.append('file', buffer, { filename, contentType: mimetype });
+  form.append('type', mimetype);
+
+  const respuesta = await fetch(`${GRAPH_BASE}/${PHONE_NUMBER_ID}/media`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${TOKEN}`,
+      ...form.getHeaders()
+    },
+    body: form
+  });
+
+  const data = await respuesta.json();
+  if (!respuesta.ok || !data.id) {
+    throw new Error(`Meta media upload error: ${data.error?.message || respuesta.statusText}`);
+  }
+  return data.id;
+}
+
+// ==========================================
 // ENVIAR DOCUMENTO (PDF)
 // ==========================================
 
 export async function enviarDocumento(numero, pdfPath, nombreArchivo) {
   try {
-    logger.info(`📄 Enviando documento a ${numero} via Wappfly`);
+    const to = formatearNumero(numero);
+    logger.info(`📄 Enviando documento a ${to} via Meta`);
 
-    // Leer archivo y convertir a base64
     const pdfBuffer = fs.readFileSync(pdfPath);
-    const base64 = pdfBuffer.toString('base64');
+    const mediaId = await subirMedia(pdfBuffer, 'application/pdf', nombreArchivo);
 
-    const respuesta = await fetch(`${WAPPFLY_API_BASE}/messages/document`, {
+    const respuesta = await fetch(`${GRAPH_BASE}/${PHONE_NUMBER_ID}/messages`, {
       method: 'POST',
       headers: {
-        'X-API-Token': WAPPFLY_TOKEN,
+        'Authorization': `Bearer ${TOKEN}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        to: formatearJID(numero),
-        file: base64,
-        mimetype: 'application/pdf',
-        filename: nombreArchivo
+        messaging_product: 'whatsapp',
+        to,
+        type: 'document',
+        document: { id: mediaId, filename: nombreArchivo }
       })
     });
 
+    const data = await respuesta.json();
     if (!respuesta.ok) {
-      const error = await respuesta.json();
-      throw new Error(`Wappfly error: ${error.error || respuesta.statusText}`);
+      throw new Error(`Meta error: ${data.error?.message || respuesta.statusText}`);
     }
 
-    const data = await respuesta.json();
-    logger.info(`✅ Documento enviado. ID: ${data.msg_id}`);
+    logger.info(`✅ Documento enviado. ID: ${data.messages?.[0]?.id}`);
     return data;
 
   } catch (error) {
@@ -104,32 +130,32 @@ export async function enviarDocumento(numero, pdfPath, nombreArchivo) {
 
 export async function enviarImagen(numero, urlImagen) {
   try {
-    logger.info(`🖼️ Enviando imagen a ${numero} via Wappfly`);
+    const to = formatearNumero(numero);
+    logger.info(`🖼️ Enviando imagen a ${to} via Meta`);
 
-    // Descargar imagen y convertir a base64
     const imageBuffer = await descargarBuffer(urlImagen);
-    const base64 = imageBuffer.toString('base64');
+    const mediaId = await subirMedia(imageBuffer, 'image/jpeg', 'imagen.jpg');
 
-    const respuesta = await fetch(`${WAPPFLY_API_BASE}/messages/image`, {
+    const respuesta = await fetch(`${GRAPH_BASE}/${PHONE_NUMBER_ID}/messages`, {
       method: 'POST',
       headers: {
-        'X-API-Token': WAPPFLY_TOKEN,
+        'Authorization': `Bearer ${TOKEN}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        to: formatearJID(numero),
-        file: base64,
-        mimetype: 'image/jpeg'
+        messaging_product: 'whatsapp',
+        to,
+        type: 'image',
+        image: { id: mediaId }
       })
     });
 
+    const data = await respuesta.json();
     if (!respuesta.ok) {
-      const error = await respuesta.json();
-      throw new Error(`Wappfly error: ${error.error || respuesta.statusText}`);
+      throw new Error(`Meta error: ${data.error?.message || respuesta.statusText}`);
     }
 
-    const data = await respuesta.json();
-    logger.info(`✅ Imagen enviada. ID: ${data.msg_id}`);
+    logger.info(`✅ Imagen enviada. ID: ${data.messages?.[0]?.id}`);
     return data;
 
   } catch (error) {
@@ -153,37 +179,41 @@ function descargarBuffer(urlMedia) {
 }
 
 // ==========================================
-// DESCARGAR MEDIA
+// DESCARGAR MEDIA DE META (por media_id)
 // ==========================================
+// Meta no da URL directa: primero GET /{media_id} para la URL temporal,
+// luego descarga con el token. Retorna ruta local.
 
-export async function descargarMedia(mediaUrl, nombreArchivo) {
-  return new Promise((resolve, reject) => {
-    try {
-      logger.info(`⬇️ Descargando media de ${mediaUrl}`);
+export async function descargarMedia(mediaId, nombreArchivo) {
+  try {
+    logger.info(`⬇️ Descargando media Meta id=${mediaId}`);
 
-      const dirMedia = path.join(process.cwd(), 'media');
-      if (!fs.existsSync(dirMedia)) {
-        fs.mkdirSync(dirMedia, { recursive: true });
-      }
-
-      const rutaLocal = path.join(dirMedia, nombreArchivo);
-      const file = fs.createWriteStream(rutaLocal);
-
-      https.get(mediaUrl, (response) => {
-        response.pipe(file);
-        file.on('finish', () => {
-          file.close();
-          logger.info(`✅ Media descargada: ${rutaLocal}`);
-          resolve(rutaLocal);
-        });
-      }).on('error', (err) => {
-        fs.unlink(rutaLocal, () => {});
-        reject(err);
-      });
-
-    } catch (error) {
-      logearError(error, `Descarga de media`);
-      reject(error);
+    // 1. Obtener URL temporal
+    const metaResp = await fetch(`${GRAPH_BASE}/${mediaId}`, {
+      headers: { 'Authorization': `Bearer ${TOKEN}` }
+    });
+    const metaData = await metaResp.json();
+    if (!metaData.url) {
+      throw new Error(`No se obtuvo URL de media: ${metaData.error?.message || 'sin url'}`);
     }
-  });
+
+    // 2. Descargar binario con token
+    const binResp = await fetch(metaData.url, {
+      headers: { 'Authorization': `Bearer ${TOKEN}` }
+    });
+    const arrayBuffer = await binResp.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    const dirMedia = path.join(process.cwd(), 'media');
+    if (!fs.existsSync(dirMedia)) fs.mkdirSync(dirMedia, { recursive: true });
+
+    const rutaLocal = path.join(dirMedia, nombreArchivo);
+    fs.writeFileSync(rutaLocal, buffer);
+    logger.info(`✅ Media descargada: ${rutaLocal}`);
+    return rutaLocal;
+
+  } catch (error) {
+    logearError(error, `Descarga de media Meta`);
+    throw error;
+  }
 }
