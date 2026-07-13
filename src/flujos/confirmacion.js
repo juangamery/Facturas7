@@ -81,12 +81,10 @@ export default async function emitirFactura(numeroDeTelefono, usuario) {
 
     // ===== STEP 4: ENVIAR PDF =====
 
-    // Calcular URL pública para servir el PDF
-    const urlPDF = `${process.env.BASE_URL}/facturas/${path.basename(rutaPDF)}`;
-
+    // Meta sube el archivo local directamente (no por URL pública)
     await enviarDocumento(
       numeroDeTelefono,
-      urlPDF,
+      rutaPDF,
       `Factura_${datosFactura.numero_factura}.pdf`
     );
 
