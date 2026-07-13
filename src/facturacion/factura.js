@@ -1,166 +1,155 @@
 // ==========================================
-// INTEGRACIÓN CON AFIP SDK - Generar facturas
+// INTEGRACIÓN AFIP SDK (oficial @afipsdk/afip.js)
 // ==========================================
-// Comunicación con afipsdk.com para obtener CAE y número de comprobante
+// Emite Factura C de monotributo vía Web Services de ARCA/AFIP.
+// Homologación (prueba) o producción según AFIPSDK_ENTORNO.
 
-import axios from 'axios';
+import Afip from '@afipsdk/afip.js';
 import { logger, logearError } from '../logger.js';
 
-const API_BASE = 'https://api.afipsdk.com';
-const TOKEN = process.env.AFIPSDK_TOKEN;
-const ENTORNO = process.env.AFIPSDK_ENTORNO || 'homologacion';
+const ACCESS_TOKEN = process.env.AFIPSDK_TOKEN;
+const PRODUCCION = (process.env.AFIPSDK_ENTORNO || 'homologacion') === 'produccion';
 
-// Tipo de comprobante: 11 = Factura C, 1 = Factura A, 6 = Factura B
-const TIPO_COMPROBANTE = {
-  'Factura C': 11,
-  'Factura A': 1,
-  'Factura B': 6
-};
+// Tipo de comprobante ARCA: 11 = Factura C, 6 = Factura B, 1 = Factura A
+const TIPO_COMPROBANTE = { 'Factura C': 11, 'Factura B': 6, 'Factura A': 1 };
 
-// Tipo de documento: 80 = CUIT, 96 = DNI, 99 = Consumidor final
+// Crea instancia Afip para un CUIT emisor
+function crearAfip(cuitEmisor) {
+  const cuit = parseInt(String(cuitEmisor).replace(/\D/g, ''), 10);
+  return new Afip({ CUIT: cuit, access_token: ACCESS_TOKEN, production: PRODUCCION });
+}
+
+// Tipo de documento receptor: 80 = CUIT, 96 = DNI, 99 = Consumidor final
 function getTipoDocumento(documento) {
-  if (documento === 'CF' || documento.toUpperCase() === 'CONSUMIDOR FINAL') {
-    return 99;
-  } else if (documento.startsWith('DNI')) {
-    return 96;
-  } else {
-    return 80; // CUIT
-  }
+  const d = String(documento || '').toUpperCase().trim();
+  if (d === 'CF' || d === 'CONSUMIDOR FINAL' || d === '') return 99;
+  if (d.startsWith('DNI')) return 96;
+  return 80; // CUIT
 }
 
-// Parsear documento a número
 function parsearDocumento(documento) {
-  if (documento === 'CF' || documento.toUpperCase() === 'CONSUMIDOR FINAL') {
-    return 0;
-  }
+  const d = String(documento || '').toUpperCase().trim();
+  if (d === 'CF' || d === 'CONSUMIDOR FINAL' || d === '') return 0;
+  return parseInt(d.replace('DNI', '').replace(/\D/g, ''), 10) || 0;
+}
 
-  // Remover "DNI " si existe
-  let doc = documento.replace('DNI ', '').trim();
-  // Remover guiones del CUIT
-  doc = doc.replace(/-/g, '');
-  return parseInt(doc);
+// Fecha AFIP: YYYYMMDD
+function fechaAfip() {
+  const hoy = new Date();
+  const y = hoy.getFullYear();
+  const m = String(hoy.getMonth() + 1).padStart(2, '0');
+  const d = String(hoy.getDate()).padStart(2, '0');
+  return `${y}${m}${d}`;
 }
 
 // ==========================================
-// OBTENER ÚLTIMO NÚMERO DE COMPROBANTE
+// SOLICITAR CAE — emite el comprobante
 // ==========================================
-
-export async function obtenerUltimoComprobante(cuit, puntoVenta) {
-  try {
-    const response = await axios.get(
-      `${API_BASE}/${ENTORNO}/comprobante/ultimo`,
-      {
-        headers: { 'Authorization': `Bearer ${TOKEN}` },
-        params: {
-          cuit: cuit.replace(/-/g, ''),
-          punto_venta: puntoVenta,
-          tipo_comprobante: TIPO_COMPROBANTE['Factura C']
-        }
-      }
-    );
-
-    return response.data.numero || 0;
-
-  } catch (error) {
-    logearError(error, 'obtenerUltimoComprobante');
-    throw new Error('No pude obtener el último número de factura. Intentá de nuevo.');
-  }
-}
-
-// ==========================================
-// SOLICITAR CAE (Código de Autorización Electrónica)
-// ==========================================
-
 export async function solicitarCAE(datosFactura) {
   try {
-    // Reintentar 2 veces si falla (red inestable)
-    let intento = 0;
-    let ultError;
+    const afip = crearAfip(datosFactura.cuit);
+    const ptoVta = parseInt(datosFactura.punto_venta, 10);
+    const cbteTipo = TIPO_COMPROBANTE[datosFactura.tipoComprobante || datosFactura.tipo_comprobante || 'Factura C'];
 
-    while (intento < 3) {
-      try {
-        const cuitNumerico = datosFactura.cuit.replace(/-/g, '');
-        const tipoComp = TIPO_COMPROBANTE[datosFactura.tipoComprobante || 'Factura C'];
-        const tipoDocRec = getTipoDocumento(datosFactura.documento_cliente);
-        const nroDocRec = parsearDocumento(datosFactura.documento_cliente);
+    // Último comprobante emitido → siguiente número
+    const ultimo = await afip.ElectronicBilling.getLastVoucher(ptoVta, cbteTipo);
+    const numero = (ultimo || 0) + 1;
 
-        const payload = {
-          punto_venta: datosFactura.punto_venta,
-          tipo_comprobante: tipoComp,
-          fecha_emision: datosFactura.fecha_emision,
-          razon_social_receptor: datosFactura.razon_social_cliente,
-          tipo_documento_receptor: tipoDocRec,
-          numero_documento_receptor: nroDocRec,
-          concepto: datosFactura.concepto,
-          importe_total: datosFactura.importe,
-          condicion_iva_receptor: datosFactura.condicion_iva_cliente || '5' // 5 = Consumidor final
-        };
+    const docTipo = getTipoDocumento(datosFactura.documento_cliente);
+    const docNro = parsearDocumento(datosFactura.documento_cliente);
+    const importe = Math.round(parseFloat(datosFactura.importe) * 100) / 100;
+    const concepto = datosFactura.concepto_afip || 1; // 1=Productos, 2=Servicios, 3=Ambos
 
-        const response = await axios.post(
-          `${API_BASE}/${ENTORNO}/comprobante/solicitar-cae`,
-          payload,
-          {
-            headers: { 'Authorization': `Bearer ${TOKEN}` },
-            timeout: 10000
-          }
-        );
+    // Factura C monotributo: no discrimina IVA (ImpNeto = ImpTotal)
+    const data = {
+      CantReg: 1,
+      PtoVta: ptoVta,
+      CbteTipo: cbteTipo,
+      Concepto: concepto,
+      DocTipo: docTipo,
+      DocNro: docNro,
+      CbteDesde: numero,
+      CbteHasta: numero,
+      CbteFch: parseInt(fechaAfip(), 10),
+      ImpTotal: importe,
+      ImpTotConc: 0,
+      ImpNeto: importe,
+      ImpOpEx: 0,
+      ImpIVA: 0,
+      ImpTrib: 0,
+      MonId: 'PES',
+      MonCotiz: 1,
+      CondicionIVAReceptorId: parseInt(datosFactura.condicion_iva_cliente || 5, 10), // 5 = Consumidor Final
+    };
 
-        if (response.data.cae && response.data.vencimiento_cae) {
-          logger.info(`✅ CAE obtenido: ${response.data.cae}`);
-          return {
-            cae: response.data.cae,
-            vencimiento_cae: response.data.vencimiento_cae,
-            numero_comprobante: response.data.numero_comprobante
-          };
-        } else {
-          throw new Error('Respuesta inválida de AFIP SDK');
-        }
+    const res = await afip.ElectronicBilling.createNextVoucher(data);
 
-      } catch (e) {
-        ultError = e;
-        intento++;
-        if (intento < 3) {
-          logger.warn(`Intento ${intento} fallido, reintentando...`);
-          await new Promise(r => setTimeout(r, 3000)); // Esperar 3 segundos
-        }
-      }
-    }
-
-    throw ultError;
+    logger.info(`✅ CAE obtenido: ${res.CAE} (comprobante ${res.voucherNumber})`);
+    return {
+      cae: res.CAE,
+      vencimiento_cae: res.CAEFchVto,
+      numero_comprobante: res.voucherNumber || numero,
+    };
 
   } catch (error) {
     logearError(error, 'solicitarCAE');
-    throw new Error('No pude obtener el CAE. Verificá los datos e intentá de nuevo.');
+    throw new Error('No pude obtener el CAE de AFIP. Verificá los datos e intentá de nuevo.');
+  }
+}
+
+// ==========================================
+// PADRÓN — auto-completar datos por CUIT
+// ==========================================
+// Trae razón social, domicilio y condición IVA desde el padrón de ARCA.
+// Requiere que el CUIT consultor tenga autorizado el WS de padrón.
+export async function consultarPadron(cuitConsultor, cuitBuscado) {
+  try {
+    const afip = crearAfip(cuitConsultor);
+    const cuit = parseInt(String(cuitBuscado).replace(/\D/g, ''), 10);
+    const data = await afip.RegisterScopeFive.getTaxpayerDetails(cuit);
+    return data;
+  } catch (error) {
+    logearError(error, 'consultarPadron');
+    return null;
+  }
+}
+
+// ==========================================
+// PUNTOS DE VENTA habilitados del CUIT
+// ==========================================
+export async function obtenerPuntosVenta(cuitEmisor) {
+  try {
+    const afip = crearAfip(cuitEmisor);
+    const puntos = await afip.ElectronicBilling.getSalesPoints();
+    return puntos;
+  } catch (error) {
+    logearError(error, 'obtenerPuntosVenta');
+    return null;
   }
 }
 
 // ==========================================
 // VALIDACIONES PREVIAS
 // ==========================================
-
 export function validarDatosFactura(datos) {
   const errores = [];
 
-  if (!datos.razon_social_cliente) {
-    errores.push('Falta nombre del cliente');
-  }
+  if (!datos.razon_social_cliente) errores.push('Falta nombre del cliente');
 
   if (!datos.documento_cliente) {
     errores.push('Falta documento del cliente');
   } else if (datos.documento_cliente !== 'CF' &&
-    !datos.documento_cliente.match(/^(\d{2}-\d{8}-\d|DNI\s*\d{7,8})$/)) {
+    !String(datos.documento_cliente).match(/^(\d{2}-?\d{8}-?\d|DNI\s*\d{7,8})$/i)) {
     errores.push('Documento inválido. Formatos: 20-12345678-9, DNI 12345678, CF');
   }
 
-  if (!datos.concepto) {
-    errores.push('Falta concepto/descripción');
-  }
+  if (!datos.concepto) errores.push('Falta concepto/descripción');
 
   if (!datos.importe || isNaN(datos.importe) || datos.importe <= 0) {
     errores.push('Importe inválido (debe ser número positivo)');
   }
 
-  if (!datos.cuit || !datos.cuit.match(/^\d{2}-\d{8}-\d$/)) {
+  if (!datos.cuit || !String(datos.cuit).match(/^\d{2}-?\d{8}-?\d$/)) {
     errores.push('CUIT del emisor inválido');
   }
 
@@ -168,8 +157,5 @@ export function validarDatosFactura(datos) {
     errores.push('Punto de venta inválido');
   }
 
-  return {
-    valido: errores.length === 0,
-    errores
-  };
+  return { valido: errores.length === 0, errores };
 }
