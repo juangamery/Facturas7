@@ -88,29 +88,31 @@ export default async function emitirFactura(numeroDeTelefono, usuario) {
       `Factura_${datosFactura.numero_factura}.pdf`
     );
 
-    // ===== STEP 5: GUARDAR EN BD =====
+    // ===== STEP 5-6: GUARDAR EN BD + CONTADOR (no crítico) =====
+    // Si falla la DB, el PDF ya se envió — no romper el flujo.
+    try {
+      await crearFactura(usuario.id, {
+        numero_telefono: numeroDeTelefono,
+        fecha_emision: datosFactura.fecha_emision,
+        tipo_comprobante: datosFactura.tipo_comprobante,
+        numero_factura: datosFactura.numero_factura,
+        razon_social_cliente: datosFactura.razon_social_cliente,
+        documento_cliente: datosFactura.documento_cliente,
+        concepto: datosFactura.concepto,
+        importe: datosFactura.importe,
+        cae: datosFactura.cae,
+        vencimiento_cae: datosFactura.vencimiento_cae,
+        pdf_path: rutaPDF,
+        origen: 'texto'
+      });
 
-    crearFactura(usuario.id, {
-      numero_telefono: numeroDeTelefono,
-      fecha_emision: datosFactura.fecha_emision,
-      tipo_comprobante: datosFactura.tipo_comprobante,
-      numero_factura: datosFactura.numero_factura,
-      razon_social_cliente: datosFactura.razon_social_cliente,
-      documento_cliente: datosFactura.documento_cliente,
-      concepto: datosFactura.concepto,
-      importe: datosFactura.importe,
-      cae: datosFactura.cae,
-      vencimiento_cae: datosFactura.vencimiento_cae,
-      pdf_path: rutaPDF,
-      origen: 'texto'
-    });
-
-    // ===== STEP 6: INCREMENTAR CONTADOR DE FACTURAS DEL MES =====
-
-    const usuarioActualizado = obtenerUsuarioPorID(usuario.id);
-    actualizarUsuario(usuario.id, {
-      facturas_mes_actual: usuarioActualizado.facturas_mes_actual + 1
-    });
+      const usuarioActualizado = await obtenerUsuarioPorID(usuario.id);
+      await actualizarUsuario(usuario.id, {
+        facturas_mes_actual: (usuarioActualizado?.facturas_mes_actual || 0) + 1
+      });
+    } catch (dbErr) {
+      logger.warn(`No se guardó factura en BD (PDF ya enviado): ${dbErr.message}`);
+    }
 
     // ===== STEP 7: ENVIAR CONFIRMACIÓN =====
 

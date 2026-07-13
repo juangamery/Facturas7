@@ -264,12 +264,10 @@ async function validarYGuardarImporte(numeroDeTelefono, texto, usuario) {
 
 async function confirmarFactura(numeroDeTelefono, textoNorm, usuario) {
   if (textoNorm === 'SI' || textoNorm === 'SÍ') {
-    // Crear factura (delegar a otro módulo)
+    // Emisor real: pide CAE a AFIP, genera PDF y lo manda por WhatsApp
     logger.info(`✅ Factura confirmada para ${numeroDeTelefono}`);
-    await enviarTexto(numeroDeTelefono,
-      '✅ Factura creada.\n\n🔗 Descargá tu PDF en el panel.');
-    await limpiarConversacion(numeroDeTelefono);
-    await mostrarMenuPrincipal(numeroDeTelefono, usuario);
+    const { default: emitirFactura } = await import('./confirmacion.js');
+    await emitirFactura(numeroDeTelefono, usuario);
     return;
   }
 

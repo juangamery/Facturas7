@@ -38,8 +38,13 @@ export async function obtenerEstado(numeroDeTelefono) {
   return await obtenerConversacion(numeroDeTelefono);
 }
 
-// Ir al siguiente paso
-export async function siguientePaso(numeroDeTelefono, nuevoPaso, datos = {}) {
+// Ir al siguiente paso.
+// Si no se pasan datos, se PRESERVAN los existentes (no se pisan con {}).
+export async function siguientePaso(numeroDeTelefono, nuevoPaso, datos) {
+  if (datos === undefined) {
+    const conv = await obtenerConversacion(numeroDeTelefono);
+    datos = conv?.datos ? JSON.parse(conv.datos) : {};
+  }
   await guardarConversacion(numeroDeTelefono, nuevoPaso, datos);
   logger.debug(`Paso actualizado: ${numeroDeTelefono} → ${nuevoPaso}`);
 }
