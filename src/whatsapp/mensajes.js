@@ -15,10 +15,13 @@ const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
 const API_VERSION = process.env.WHATSAPP_API_VERSION || 'v21.0';
 const GRAPH_BASE = `https://graph.facebook.com/${API_VERSION}`;
 
-// Meta espera el número en formato E.164 SOLO dígitos (ej: 5493764217673),
-// sin '+', sin @s.whatsapp.net, sin @lid. El webhook entrega 'from' así.
+// Meta espera el número en E.164 solo dígitos, sin '+', sin @s.whatsapp.net.
+// Quirk Argentina: el wa_id viene como 549XXXXXXXXXX (con 9) pero Meta SOLO
+// entrega a 54XXXXXXXXXX (sin 9). Normalizamos quitando ese 9.
 function formatearNumero(numero) {
-  return String(numero).replace(/@.*$/, '').replace(/\D/g, '');
+  let n = String(numero).replace(/@.*$/, '').replace(/\D/g, '');
+  if (/^549\d{10}$/.test(n)) n = '54' + n.slice(3);
+  return n;
 }
 
 // ==========================================
