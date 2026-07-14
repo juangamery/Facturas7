@@ -65,7 +65,7 @@ export async function solicitarCAE(datosFactura) {
   try {
     const produccion = datosFactura.entorno === 'produccion';
     const afip = crearAfip(datosFactura.cuit, produccion);
-    const ptoVta = parseInt(datosFactura.punto_venta, 10);
+    const ptoVta = parseInt(datosFactura.punto_venta, 10) || 1;
     const cbteTipo = TIPO_COMPROBANTE[datosFactura.tipoComprobante || datosFactura.tipo_comprobante || 'Factura C'];
 
     // Último comprobante emitido → siguiente número

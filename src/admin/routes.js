@@ -410,7 +410,7 @@ router.get('/clientes/:id/editar', async (req, res) => {
 // POST /admin/clientes/:id/editar - Guardar cambios
 router.post('/clientes/:id/editar', async (req, res) => {
   try {
-    const { nombre, numero_telefono, cuit, razon_social, domicilio, condicion_iva, email, plan } = req.body;
+    const { nombre, numero_telefono, cuit, razon_social, domicilio, condicion_iva, email, plan, punto_venta, entorno } = req.body;
     if (!nombre || !numero_telefono) {
       return res.status(400).json({ error: 'Nombre y teléfono son obligatorios' });
     }
@@ -430,6 +430,8 @@ router.post('/clientes/:id/editar', async (req, res) => {
       condicion_iva: condicion_iva || null,
       email: email || null,
       plan: plan || 'basico',
+      punto_venta: punto_venta ? parseInt(punto_venta, 10) : null,
+      entorno: entorno === 'produccion' ? 'produccion' : 'homologacion',
       limite_facturas_mes: plan === 'premium' ? -1 : 100
     });
 
