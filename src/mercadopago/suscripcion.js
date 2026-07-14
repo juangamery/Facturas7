@@ -18,6 +18,13 @@ function headers() {
 // Crea la suscripción mensual del usuario. Devuelve { id, init_point } o null.
 export async function crearSuscripcion(usuario) {
   try {
+    // MOCK - Testing sin token MP válido
+    const mockId = 'mock_' + Date.now();
+    const mockLink = `${process.env.BASE_URL || 'https://facturas7.onrender.com'}/pago-simulado?ref=${mockId}&email=${usuario.email}`;
+    logger.info(`💳 MOCK Suscripción creada ${mockId} para usuario ${usuario.id}`);
+    return { id: mockId, init_point: mockLink };
+
+    /* ORIGINAL - Descomentar cuando token MP funcione
     const body = {
       reason: 'Facturas7 - Suscripción mensual',
       external_reference: String(usuario.id),
@@ -35,6 +42,7 @@ export async function crearSuscripcion(usuario) {
     const { data } = await axios.post(`${MP_API}/preapproval`, body, { headers: headers() });
     logger.info(`💳 Suscripción MP creada ${data.id} para usuario ${usuario.id}`);
     return { id: data.id, init_point: data.init_point };
+    */
   } catch (error) {
     logearError(error, 'crearSuscripcion MP');
     return null;
