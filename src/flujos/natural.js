@@ -24,11 +24,21 @@ const PIDE = {
   importe: 'el *importe* en pesos',
 };
 
+// Etiqueta el documento según su tipo real (AFIP los distingue por longitud)
+function etiquetaDocumento(doc) {
+  const d = String(doc || '').toUpperCase().trim();
+  if (d === 'CF' || d === 'CONSUMIDOR FINAL') return 'Consumidor Final';
+  const dig = d.replace(/\D/g, '');
+  if (dig.length === 11) return `CUIT ${dig}`;
+  if (dig.length === 7 || dig.length === 8) return `DNI ${dig}`;
+  return d;
+}
+
 function resumen(c) {
   return `📋 Repasá la factura:
 
 • Cliente: ${c.razon_social_cliente}
-• Documento: ${c.documento_cliente}
+• ${etiquetaDocumento(c.documento_cliente)}
 • Concepto: ${c.concepto}
 • Importe: $${c.importe}
 • Pago: ${c.condicion_venta || 'Contado'}
@@ -66,7 +76,7 @@ export async function manejarFacturaNatural(numeroDeTelefono, texto, usuario, da
   // Faltan datos: pedir SOLO lo que falta, en tono amable
   const yaTengo = [];
   if (campos.razon_social_cliente) yaTengo.push(`cliente *${campos.razon_social_cliente}*`);
-  if (campos.documento_cliente) yaTengo.push(`doc *${campos.documento_cliente}*`);
+  if (campos.documento_cliente) yaTengo.push(`*${etiquetaDocumento(campos.documento_cliente)}*`);
   if (campos.concepto) yaTengo.push(`concepto *${campos.concepto}*`);
   if (campos.importe) yaTengo.push(`importe *$${campos.importe}*`);
 
