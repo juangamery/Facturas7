@@ -30,7 +30,7 @@
     <div class="bg-slate-800/50 border border-slate-700 rounded-lg p-6 mb-6">
       <h2 class="text-lg font-semibold mb-4 text-slate-200">Información General</h2>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-        <p><span class="text-slate-400">Teléfono:</span> <span class="text-white">+<%= usuario.numero_telefono %></span></p>
+        <p><span class="text-slate-400">Teléfono:</span> <span class="text-white">+<%= String(usuario.numero_telefono).replace(/^\+/, '') %></span></p>
         <p><span class="text-slate-400">CUIT:</span> <span class="text-white"><%= usuario.cuit || '-' %></span></p>
         <p><span class="text-slate-400">Razón Social:</span> <span class="text-white"><%= usuario.razon_social || '-' %></span></p>
         <p><span class="text-slate-400">Domicilio:</span> <span class="text-white"><%= usuario.domicilio || '-' %></span></p>
@@ -50,7 +50,8 @@
         <p><span class="text-slate-400">Facturas del Mes:</span> <span class="text-white"><%= usuario.facturas_mes_actual || 0 %>/<%= usuario.limite_facturas_mes === -1 ? '∞' : usuario.limite_facturas_mes %></span></p>
       </div>
 
-      <div class="flex gap-3 mt-6 pt-4 border-t border-slate-700">
+      <div class="flex flex-wrap gap-3 mt-6 pt-4 border-t border-slate-700">
+        <a href="/admin/clientes/<%= usuario.id %>/editar" class="px-4 py-2 rounded-lg font-semibold text-sm bg-slate-700 hover:bg-slate-600 transition">✏️ Editar datos</a>
         <button id="btn-activar" class="px-4 py-2 rounded-lg font-semibold text-sm transition <%= usuario.activo ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700' %>">
           <%= usuario.activo ? '🚫 Desactivar' : '✅ Activar' %>
         </button>

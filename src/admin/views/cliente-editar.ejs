@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Editar <%= usuario.nombre %> - Facturación</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 text-white">
+  <nav class="sticky top-0 z-50 border-b border-slate-800 bg-slate-900/95 backdrop-blur">
+    <div class="flex items-center justify-between px-6 py-4 max-w-7xl mx-auto w-full">
+      <a class="text-xl font-bold text-blue-400" href="/admin/dashboard">📱 Facturación</a>
+      <div class="flex gap-2">
+        <a class="px-4 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800 transition" href="/admin/dashboard">📊 Dashboard</a>
+        <a class="px-4 py-2 rounded-lg text-sm font-medium text-white bg-slate-800" href="/admin/clientes">👥 Clientes</a>
+        <a class="px-4 py-2 rounded-lg text-sm font-medium text-red-400 hover:text-red-300 hover:bg-slate-800 transition" href="/admin/logout">🚪 Salir</a>
+      </div>
+    </div>
+  </nav>
+
+  <main class="p-8 max-w-2xl mx-auto">
+    <a href="/admin/clientes/<%= usuario.id %>" class="text-blue-400 hover:text-blue-300 flex items-center gap-2 mb-4">← Volver</a>
+    <h1 class="text-4xl font-bold mb-6">✏️ Editar Cliente</h1>
+
+    <div id="mensaje" class="hidden mb-6 px-4 py-3 rounded-lg text-sm font-medium"></div>
+
+    <div class="bg-slate-800/50 border border-slate-700 rounded-lg p-8">
+      <form id="form-editar" method="POST" action="/admin/clientes/<%= usuario.id %>/editar" class="space-y-5">
+        <% const campos = [
+          { name: 'nombre', label: 'Nombre / Razón Social *', value: usuario.nombre, ph: 'Juan Pérez' },
+          { name: 'numero_telefono', label: 'Número de WhatsApp *', value: usuario.numero_telefono, ph: '5493764XXXXXXX' },
+          { name: 'cuit', label: 'CUIT', value: usuario.cuit, ph: '20-12345678-9' },
+          { name: 'razon_social', label: 'Razón Social', value: usuario.razon_social, ph: '' },
+          { name: 'domicilio', label: 'Domicilio', value: usuario.domicilio, ph: '' },
+          { name: 'condicion_iva', label: 'Condición IVA', value: usuario.condicion_iva, ph: 'Monotributista' },
+          { name: 'email', label: 'Email', value: usuario.email, ph: 'cliente@mail.com' }
+        ]; %>
+        <% campos.forEach(c => { %>
+        <div>
+          <label class="block text-sm font-semibold text-white mb-2"><%= c.label %></label>
+          <input type="text" name="<%= c.name %>" value="<%= c.value || '' %>" placeholder="<%= c.ph %>"
+            class="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-600 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none">
+        </div>
+        <% }); %>
+
+        <div>
+          <label class="block text-sm font-semibold text-white mb-2">Plan</label>
+          <select name="plan" class="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-600 text-white focus:border-blue-500 focus:outline-none">
+            <option value="basico" <%= usuario.plan === 'basico' ? 'selected' : '' %>>Básico</option>
+            <option value="premium" <%= usuario.plan === 'premium' ? 'selected' : '' %>>Premium</option>
+            <option value="trial" <%= usuario.plan === 'trial' ? 'selected' : '' %>>Trial</option>
+          </select>
+        </div>
+
+        <div class="flex gap-4 pt-6 border-t border-slate-700">
+          <button type="submit" class="px-6 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold transition">Guardar cambios</button>
+          <a href="/admin/clientes/<%= usuario.id %>" class="px-6 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white font-semibold transition">Cancelar</a>
+        </div>
+      </form>
+    </div>
+  </main>
+
+  <script>
+    const form = document.getElementById('form-editar');
+    const msg = document.getElementById('mensaje');
+    const uid = '<%= usuario.id %>';
+
+    function mostrar(texto, ok) {
+      msg.textContent = texto;
+      msg.className = 'mb-6 px-4 py-3 rounded-lg text-sm font-medium ' +
+        (ok ? 'bg-green-500/15 text-green-300 border border-green-500/30'
+            : 'bg-red-500/15 text-red-300 border border-red-500/30');
+      msg.classList.remove('hidden');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = form.querySelector('button[type="submit"]');
+      btn.disabled = true; btn.textContent = 'Guardando...';
+      try {
+        const r = await fetch(form.action, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams(new FormData(form)),
+        });
+        const data = await r.json();
+        if (r.ok && data.success) {
+          mostrar('✅ Cambios guardados', true);
+          setTimeout(() => { window.location.href = '/admin/clientes/' + uid; }, 800);
+        } else {
+          mostrar('❌ ' + (data.error || 'No se pudo guardar'), false);
+          btn.disabled = false; btn.textContent = 'Guardar cambios';
+        }
+      } catch (err) {
+        mostrar('❌ Error de conexión', false);
+        btn.disabled = false; btn.textContent = 'Guardar cambios';
+      }
+    });
+  </script>
+</body>
+</html>

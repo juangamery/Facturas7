@@ -30,12 +30,18 @@ export function limpiarDatos() {
 }
 
 export async function obtenerUsuario(numeroDeTelefono) {
-  const { data } = await getDB()
-    .from('usuarios')
-    .select('*')
-    .eq('numero_telefono', numeroDeTelefono)
-    .single();
-  return data;
+  const digitos = String(numeroDeTelefono).replace(/\D/g, '');
+  // Tolerante a números guardados con '+' o sin él (o con sufijo @s.whatsapp.net).
+  for (const valor of [digitos, `+${digitos}`, numeroDeTelefono]) {
+    const { data } = await getDB()
+      .from('usuarios')
+      .select('*')
+      .eq('numero_telefono', valor)
+      .limit(1)
+      .maybeSingle();
+    if (data) return data;
+  }
+  return null;
 }
 
 export async function obtenerUsuarioPorID(usuarioID) {

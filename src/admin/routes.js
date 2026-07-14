@@ -157,7 +157,7 @@ router.post('/clientes-nuevo', async (req, res) => {
     const now = ahoraSeg();
     const { error } = await getDB().from('usuarios').insert({
       nombre,
-      numero_telefono,
+      numero_telefono: String(numero_telefono).replace(/\D/g, ''),
       cuit: cuit || null,
       razon_social: razon_social || null,
       plan: plan || 'basico',
@@ -358,7 +358,7 @@ router.post('/clientes/nuevo', async (req, res) => {
     const now = ahoraSeg();
     const { error } = await getDB().from('usuarios').insert({
       nombre,
-      numero_telefono,
+      numero_telefono: String(numero_telefono).replace(/\D/g, ''),
       cuit: cuit || null,
       razon_social: razon_social || null,
       plan: plan || 'basico',
@@ -391,6 +391,52 @@ router.get('/clientes/:id', async (req, res) => {
     });
   } catch (error) {
     logearError(error, `Detalle cliente ${req.params.id}`);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /admin/clientes/:id/editar - Formulario de edición
+router.get('/clientes/:id/editar', async (req, res) => {
+  try {
+    const usuario = await obtenerUsuarioPorID(req.params.id);
+    if (!usuario) return res.status(404).render('error', { error: 'Cliente no encontrado' });
+    res.render('cliente-editar', { title: `Editar: ${usuario.nombre}`, usuario });
+  } catch (error) {
+    logearError(error, `Editar form ${req.params.id}`);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /admin/clientes/:id/editar - Guardar cambios
+router.post('/clientes/:id/editar', async (req, res) => {
+  try {
+    const { nombre, numero_telefono, cuit, razon_social, domicilio, condicion_iva, email, plan } = req.body;
+    if (!nombre || !numero_telefono) {
+      return res.status(400).json({ error: 'Nombre y teléfono son obligatorios' });
+    }
+    if (cuit && !validarCUIT(String(cuit).replace(/\D/g, ''))) {
+      return res.status(400).json({ error: 'CUIT inválido' });
+    }
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: 'Email inválido' });
+    }
+
+    await actualizarUsuario(req.params.id, {
+      nombre,
+      numero_telefono: String(numero_telefono).replace(/\D/g, ''),
+      cuit: cuit ? String(cuit).replace(/\D/g, '') : null,
+      razon_social: razon_social || null,
+      domicilio: domicilio || null,
+      condicion_iva: condicion_iva || null,
+      email: email || null,
+      plan: plan || 'basico',
+      limite_facturas_mes: plan === 'premium' ? -1 : 100
+    });
+
+    logger.info(`Cliente ${req.params.id} editado`);
+    res.json({ success: true });
+  } catch (error) {
+    logearError(error, `Editar cliente ${req.params.id}`);
     res.status(500).json({ error: error.message });
   }
 });
