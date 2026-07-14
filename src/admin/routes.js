@@ -639,4 +639,43 @@ router.post('/email-procesar-todos', (req, res) => {
   }
 });
 
+// POST /admin/clientes/:id/eliminar - Eliminar cliente
+router.post('/clientes/:id/eliminar', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const { data: usuario } = await getDB()
+      .from('usuarios')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (!usuario) {
+      return res.status(404).json({ error: 'Cliente no encontrado' });
+    }
+
+    // Eliminar facturas del usuario
+    const { error: errFacturas } = await getDB()
+      .from('facturas')
+      .delete()
+      .eq('usuario_id', id);
+
+    if (errFacturas) throw errFacturas;
+
+    // Eliminar cliente
+    const { error: errUsuario } = await getDB()
+      .from('usuarios')
+      .delete()
+      .eq('id', id);
+
+    if (errUsuario) throw errUsuario;
+
+    logger.info(`Cliente ${id} (${usuario.nombre}) eliminado`);
+    res.json({ success: true, message: 'Cliente y sus facturas eliminados' });
+  } catch (error) {
+    logearError(error, 'Eliminar cliente');
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
