@@ -30,6 +30,7 @@ export const PASOS = {
 
   // Registro (usuario nuevo sin acceso)
   REG_NOMBRE: 'reg_nombre',
+  REG_CUIT: 'reg_cuit',
   REG_EMAIL: 'reg_email',
 
   // Onboarding

@@ -1,13 +1,15 @@
 // ==========================================
 // FLUJO DE REGISTRO AUTOMÁTICO + PAGO
 // ==========================================
-// El bot registra a desconocidos conversando: nombre → email → prueba 7 días
+// El bot registra a desconocidos conversando: nombre → CUIT → email → prueba 7 días
+// Luego onboarding: razón social → domicilio → IVA → punto venta
 // + link de pago MercadoPago. El webhook activa la suscripción al pagar.
 
 import {
   obtenerEstado,
   siguientePaso,
   limpiarConversacion,
+  guardarDato,
   PASOS,
 } from '../bot/conversacion.js';
 import { obtenerUsuario, crearUsuario, actualizarUsuario } from '../db.js';
@@ -41,8 +43,20 @@ export async function manejarRegistro(numeroDeTelefono, texto, usuarioAcceso) {
       return;
     }
     await actualizarUsuario(usuario.id, { nombre });
+    await siguientePaso(numeroDeTelefono, PASOS.REG_CUIT);
+    await enviarTexto(numeroDeTelefono, PLANTILLAS.PEDIR_CUIT);
+    return;
+  }
+
+  if (paso === PASOS.REG_CUIT) {
+    const cuit = texto.trim().replace(/[-.\s]/g, '');
+    if (cuit.length !== 11 || isNaN(parseInt(cuit))) {
+      await enviarTexto(numeroDeTelefono, '❌ CUIT debe tener 11 dígitos. Ej: 20123456789');
+      return;
+    }
+    await guardarDato(numeroDeTelefono, 'cuit', cuit);
     await siguientePaso(numeroDeTelefono, PASOS.REG_EMAIL);
-    await enviarTexto(numeroDeTelefono, PLANTILLAS.pedir_email_registro(nombre));
+    await enviarTexto(numeroDeTelefono, PLANTILLAS.pedir_email_registro(usuario.nombre || 'Usuario'));
     return;
   }
 
@@ -53,18 +67,22 @@ export async function manejarRegistro(numeroDeTelefono, texto, usuarioAcceso) {
       return;
     }
     const ahora = Math.floor(Date.now() / 1000);
+    const conv = await obtenerEstado(numeroDeTelefono);
+    const datosReg = conv?.datos ? JSON.parse(conv.datos) : {};
+
     await actualizarUsuario(usuario.id, {
       email,
+      cuit: datosReg.cuit || null,
       activo: 1,
       plan: 'trial',
       estado_registro: 'trial',
       fecha_vencimiento: ahora + SIETE_DIAS,
     });
     await limpiarConversacion(numeroDeTelefono);
-    await siguientePaso(numeroDeTelefono, PASOS.ONBOARDING_CUIT, {});
+    await siguientePaso(numeroDeTelefono, PASOS.ONBOARDING_RAZON_SOCIAL, {});
     await enviarTexto(numeroDeTelefono, PLANTILLAS.BIENVENIDA_NUEVA);
     // Mandar también el link de pago para que se suscriba cuando quiera.
-    await enviarLinkPago(numeroDeTelefono, { ...usuario, email }, true);
+    await enviarLinkPago(numeroDeTelefono, { ...usuario, email, cuit: datosReg.cuit }, true);
     return;
   }
 
