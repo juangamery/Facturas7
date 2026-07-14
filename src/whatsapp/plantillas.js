@@ -376,7 +376,7 @@ const PALABRAS_CANCELAR = ['cancelar', 'cancel', 'salir', 'exit', 'menu', 'menú
 const PALABRAS_SI = ['si', 'sí', 'yes', 'ok', 'dale', 'confirmar', 'confirmo', 'correcto', 's', 'bueno'];
 const PALABRAS_NO = ['no', 'nop', 'nope', 'incorrecto', 'mal', 'n', 'negativo'];
 
-module.exports = {
+export {
   // Sistema
   BIENVENIDA_NUEVA,
   menuPrincipal,
