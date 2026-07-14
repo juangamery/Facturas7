@@ -147,14 +147,6 @@ async function procesarTextoGenerico(numeroDeTelefono, texto, usuario) {
       const intencion = detectarIntencion(texto);
 
       if (intencion === 'FACTURA') {
-        await procesarFacturaTexto(
-          numeroDeTelefono,
-          PLANTILLAS.PEDIR_NOMBRE_CLIENTE,
-          PASOS.FACTURA_NOMBRE_CLIENTE,
-          {}
-        );
-        // Guardar paso
-        const { siguientePaso } = await import('./conversacion.js');
         await siguientePaso(numeroDeTelefono, PASOS.FACTURA_NOMBRE_CLIENTE);
         await enviarTexto(numeroDeTelefono, PLANTILLAS.PEDIR_NOMBRE_CLIENTE);
         return;
