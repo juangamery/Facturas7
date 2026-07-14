@@ -61,6 +61,7 @@ export async function manejarRegistro(numeroDeTelefono, texto, usuarioAcceso) {
       fecha_vencimiento: ahora + SIETE_DIAS,
     });
     await limpiarConversacion(numeroDeTelefono);
+    await siguientePaso(numeroDeTelefono, PASOS.ONBOARDING_CUIT, {});
     await enviarTexto(numeroDeTelefono, PLANTILLAS.BIENVENIDA_NUEVA);
     // Mandar también el link de pago para que se suscriba cuando quiera.
     await enviarLinkPago(numeroDeTelefono, { ...usuario, email }, true);
