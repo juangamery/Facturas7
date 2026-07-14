@@ -9,14 +9,26 @@ import { logger, logearError } from '../logger.js';
 
 const ACCESS_TOKEN = process.env.AFIPSDK_TOKEN;
 const PRODUCCION = (process.env.AFIPSDK_ENTORNO || 'homologacion') === 'produccion';
+const EMPRESA_CERT = process.env.AFIP_EMPRESA_CERT;
+const EMPRESA_KEY = process.env.AFIP_EMPRESA_KEY;
 
 // Tipo de comprobante ARCA: 11 = Factura C, 6 = Factura B, 1 = Factura A
 const TIPO_COMPROBANTE = { 'Factura C': 11, 'Factura B': 6, 'Factura A': 1 };
 
-// Crea instancia Afip para un CUIT emisor
-function crearAfip(cuitEmisor) {
-  const cuit = parseInt(String(cuitEmisor).replace(/\D/g, ''), 10);
-  return new Afip({ CUIT: cuit, access_token: ACCESS_TOKEN, production: PRODUCCION });
+// Crea instancia Afip para emitir en nombre de un CUIT (representado).
+// En producción usa el certificado ÚNICO de la empresa (modelo delegación).
+function crearAfip(cuitRepresentado, produccion = PRODUCCION) {
+  const cuit = parseInt(String(cuitRepresentado).replace(/\D/g, ''), 10);
+  if (produccion) {
+    return new Afip({
+      CUIT: cuit,
+      cert: EMPRESA_CERT,
+      key: EMPRESA_KEY,
+      access_token: ACCESS_TOKEN,
+      production: true,
+    });
+  }
+  return new Afip({ CUIT: cuit, access_token: ACCESS_TOKEN, production: false });
 }
 
 // Tipo de documento receptor: 80 = CUIT, 96 = DNI, 99 = Consumidor final
@@ -51,7 +63,8 @@ function fechaAfip() {
 // ==========================================
 export async function solicitarCAE(datosFactura) {
   try {
-    const afip = crearAfip(datosFactura.cuit);
+    const produccion = datosFactura.entorno === 'produccion';
+    const afip = crearAfip(datosFactura.cuit, produccion);
     const ptoVta = parseInt(datosFactura.punto_venta, 10);
     const cbteTipo = TIPO_COMPROBANTE[datosFactura.tipoComprobante || datosFactura.tipo_comprobante || 'Factura C'];
 

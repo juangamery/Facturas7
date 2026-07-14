@@ -189,6 +189,42 @@ Estamos investigando. Intentá de nuevo en unos minutos.`,
 
 Ejemplo: 15000 (para $15.000)`,
 
+  // ===== ACTIVACIÓN PRODUCCIÓN (delegación AFIP) =====
+  ACTIVAR_ELEGIR: `🚀 Para emitir facturas *reales* (con validez fiscal) hay que habilitar tu AFIP una sola vez. Elegí:
+
+1️⃣ *Rápido* — me pasás tu CUIT y clave fiscal, y lo hago yo (tu clave se usa una vez y NO se guarda).
+2️⃣ *Manual* — te paso un tutorial y lo hacés vos en ARCA (nunca compartís tu clave).
+
+Respondé 1 o 2.`,
+
+  ACTIVAR_PEDIR_CLAVE: `🔐 Pasame en un solo mensaje tu *CUIT* y tu *clave fiscal* de AFIP.
+
+Ejemplo: \`20123456789 miClaveFiscal\`
+
+Tu clave se usa solo para habilitar el servicio y *no se almacena*.`,
+
+  ACTIVAR_PROCESANDO: `⏳ Habilitando tu AFIP... esto tarda hasta 1 o 2 minutos. Ya te aviso.`,
+
+  ACTIVAR_OK: `✅ ¡Listo! Tu cuenta ya emite facturas reales. Mandame los datos de la próxima factura cuando quieras.`,
+
+  ACTIVAR_ERROR: `❌ No pude habilitar tu AFIP. Verificá que el CUIT y la clave fiscal sean correctos (clave nivel 3) e intentá de nuevo, o escribí *manual* para hacerlo por tutorial.`,
+
+  ACTIVAR_TUTORIAL: (cuitEmpresa) => `📋 *Tutorial (2 pasos en ARCA):*
+
+*1) Delegar la facturación:*
+• Entrá a "Administrador de Relaciones" en AFIP.
+• "Nueva Relación" → Servicio: *Web Services* → Aplicación: *Facturación Electrónica*.
+• En "Representante" buscá el CUIT *${cuitEmpresa}* y confirmá dos veces.
+
+*2) Crear punto de venta:*
+• AFIP → "Administración de puntos de venta y domicilios" → "Agregar".
+• Sistema: *Facturación Electrónica - Monotributo - Webservice*.
+• Elegí un número que no uses y confirmá.
+
+Cuando termines, escribime *listo* 👍`,
+
+  ACTIVAR_MANUAL_OK: `✅ ¡Recibido! Ya vinculé tu delegación. Tu cuenta emite facturas reales. 🎉`,
+
   // ===== CANCELACIÓN =====
   CANCELADO: `❌ Cancelado. Volvemos al menú.`,
 

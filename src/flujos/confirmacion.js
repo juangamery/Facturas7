@@ -39,6 +39,7 @@ export default async function emitirFactura(numeroDeTelefono, usuario) {
 
     const datosFactura = {
       cuit: usuario.cuit,
+      entorno: usuario.entorno || 'homologacion',
       punto_venta: usuario.punto_venta,
       razon_social_cliente: datos.razon_social_cliente,
       documento_cliente: datos.documento_cliente,

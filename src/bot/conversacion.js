@@ -30,6 +30,10 @@ export const PASOS = {
   RECOPILANDO: 'recopilando',
   CONFIRMACION_FACTURA: 'confirmacion_factura',
 
+  ACTIVAR_ELEGIR: 'activar_elegir',
+  ACTIVAR_CLAVE: 'activar_clave',
+  ACTIVAR_MANUAL_ESPERA: 'activar_manual_espera',
+
   ESPERANDO_RESPUESTA: 'esperando_respuesta'
 };
 

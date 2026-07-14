@@ -20,6 +20,7 @@ import { validarCUIT, validarDocumento, validarImporte } from '../facturacion/va
 import { actualizarUsuario } from '../db.js';
 import { manejarFacturaNatural, ajustarEnConfirmacion } from './natural.js';
 import { interpretarConfirmacion } from '../ia/interpretar.js';
+import { activarClienteRapido, activarClienteManual } from '../facturacion/onboarding.js';
 
 export default async function procesarTexto(numeroDeTelefono, texto, usuario, paso, datos) {
   try {
@@ -70,6 +71,17 @@ export default async function procesarTexto(numeroDeTelefono, texto, usuario, pa
     }
     if (paso === PASOS.CONFIRMACION_FACTURA) {
       return await confirmarFactura(numeroDeTelefono, texto, usuario);
+    }
+
+    // ===== ACTIVACIÓN PRODUCCIÓN (delegación AFIP) =====
+    if (paso === PASOS.ACTIVAR_ELEGIR) {
+      return await elegirActivacion(numeroDeTelefono, textoNorm, usuario);
+    }
+    if (paso === PASOS.ACTIVAR_CLAVE) {
+      return await recibirClaveYActivar(numeroDeTelefono, texto, usuario);
+    }
+    if (paso === PASOS.ACTIVAR_MANUAL_ESPERA) {
+      return await confirmarActivacionManual(numeroDeTelefono, textoNorm, usuario);
     }
 
     // ===== MENÚ PRINCIPAL =====
@@ -295,6 +307,13 @@ async function confirmarFactura(numeroDeTelefono, texto, usuario) {
 // ===== MENÚ PRINCIPAL =====
 
 async function procesarMenuPrincipal(numeroDeTelefono, textoNorm, usuario) {
+  // Activar facturación real (delegación AFIP)
+  if (/(ACTIVAR|FACTURA REAL|FACTURAS REALES|PRODUCCION|HABILITAR)/.test(textoNorm)) {
+    await siguientePaso(numeroDeTelefono, PASOS.ACTIVAR_ELEGIR);
+    await enviarTexto(numeroDeTelefono, MENSAJES.ACTIVAR_ELEGIR);
+    return;
+  }
+
   if (textoNorm === '1') {
     await siguientePaso(numeroDeTelefono, PASOS.RECOPILANDO, {});
     await enviarTexto(numeroDeTelefono,
@@ -311,4 +330,72 @@ async function procesarMenuPrincipal(numeroDeTelefono, textoNorm, usuario) {
   // Cualquier otra cosa: intentar interpretarla como pedido de factura.
   // El usuario puede escribir directo "hacele una factura a..." sin elegir 1.
   await manejarFacturaNatural(numeroDeTelefono, textoNorm, usuario, {});
+}
+
+// ===== ACTIVACIÓN PRODUCCIÓN (delegación AFIP) =====
+
+async function elegirActivacion(numeroDeTelefono, textoNorm, usuario) {
+  if (textoNorm === '1' || textoNorm.includes('RAPID')) {
+    await siguientePaso(numeroDeTelefono, PASOS.ACTIVAR_CLAVE);
+    await enviarTexto(numeroDeTelefono, MENSAJES.ACTIVAR_PEDIR_CLAVE);
+    return;
+  }
+  if (textoNorm === '2' || textoNorm.includes('MANUAL')) {
+    await siguientePaso(numeroDeTelefono, PASOS.ACTIVAR_MANUAL_ESPERA);
+    await enviarTexto(numeroDeTelefono, MENSAJES.ACTIVAR_TUTORIAL(process.env.AFIP_EMPRESA_CUIT));
+    return;
+  }
+  await enviarTexto(numeroDeTelefono, 'Respondé 1 (rápido) o 2 (manual).');
+}
+
+async function recibirClaveYActivar(numeroDeTelefono, texto, usuario) {
+  // Formato: "CUIT clave". No logueamos el texto crudo.
+  const partes = texto.trim().split(/\s+/);
+  const cuit = (partes[0] || '').replace(/\D/g, '');
+  const clave = partes.slice(1).join(' ');
+
+  if (cuit.length !== 11 || !clave) {
+    await enviarTexto(numeroDeTelefono,
+      'Formato: primero el CUIT (11 dígitos), un espacio, y tu clave fiscal.\nEj: 20123456789 miClave');
+    return;
+  }
+
+  await enviarTexto(numeroDeTelefono, MENSAJES.ACTIVAR_PROCESANDO);
+  const r = await activarClienteRapido(cuit, clave, usuario.punto_venta || 1);
+
+  if (!r.ok) {
+    await siguientePaso(numeroDeTelefono, PASOS.ACTIVAR_ELEGIR);
+    await enviarTexto(numeroDeTelefono, MENSAJES.ACTIVAR_ERROR);
+    return;
+  }
+
+  await actualizarUsuario(usuario.id, {
+    cuit,
+    punto_venta: r.punto_venta,
+    entorno: 'produccion',
+    delegacion_estado: 'activa',
+  });
+  await limpiarConversacion(numeroDeTelefono);
+  await enviarTexto(numeroDeTelefono, MENSAJES.ACTIVAR_OK);
+}
+
+async function confirmarActivacionManual(numeroDeTelefono, textoNorm, usuario) {
+  if (!textoNorm.includes('LISTO')) {
+    await enviarTexto(numeroDeTelefono, 'Cuando termines los 2 pasos en ARCA, escribime *listo*.');
+    return;
+  }
+  await enviarTexto(numeroDeTelefono, MENSAJES.ACTIVAR_PROCESANDO);
+  const r = await activarClienteManual(usuario.cuit, usuario.punto_venta || 1);
+
+  if (!r.ok) {
+    await enviarTexto(numeroDeTelefono, MENSAJES.ACTIVAR_ERROR);
+    return;
+  }
+
+  await actualizarUsuario(usuario.id, {
+    entorno: 'produccion',
+    delegacion_estado: 'activa',
+  });
+  await limpiarConversacion(numeroDeTelefono);
+  await enviarTexto(numeroDeTelefono, MENSAJES.ACTIVAR_MANUAL_OK);
 }
