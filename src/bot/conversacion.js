@@ -47,14 +47,6 @@ export const PASOS = {
   FACTURA_IMPORTE: 'factura_importe',
   FACTURA_CONFIRMACION: 'factura_confirmacion',
 
-  // Flujo factura por imagen
-  FACTURA_IMAGEN_ANALIZAR: 'factura_imagen_analizar',
-  FACTURA_IMAGEN_CONFIRMACION: 'factura_imagen_confirmacion',
-
-  // Flujo factura por audio
-  FACTURA_AUDIO_PROCESAR: 'factura_audio_procesar',
-  FACTURA_AUDIO_CONFIRMACION: 'factura_audio_confirmacion',
-
   // Ver última factura
   VER_ULTIMA_FACTURA: 'ver_ultima_factura',
 
