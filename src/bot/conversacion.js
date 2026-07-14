@@ -34,6 +34,10 @@ export const PASOS = {
   ACTIVAR_CLAVE: 'activar_clave',
   ACTIVAR_MANUAL_ESPERA: 'activar_manual_espera',
 
+  REG_NOMBRE: 'reg_nombre',
+  REG_EMAIL: 'reg_email',
+  REG_ESPERANDO_PAGO: 'reg_esperando_pago',
+
   ESPERANDO_RESPUESTA: 'esperando_respuesta'
 };
 

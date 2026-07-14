@@ -27,7 +27,15 @@ export default async function procesarMensaje(mensaje, phoneID, displayPhoneNumb
     const acceso = await verificarAcceso(numeroDeTelefono);
 
     if (!acceso.permitido) {
-      await enviarMensajeDeAccesoDenegado(numeroDeTelefono, acceso.razon, acceso.mensaje);
+      // Límite de facturas del mes: sí es un bloqueo real.
+      if (acceso.razon === 'limite_alcanzado') {
+        await enviarMensajeDeAccesoDenegado(numeroDeTelefono, acceso.razon, acceso.mensaje);
+        return;
+      }
+      // Desconocido / inactivo / vencido → flujo de registro + pago autónomo.
+      const { manejarRegistro } = await import('../flujos/registro.js');
+      const textoReg = mensaje.type === 'text' ? mensaje.text.body : '';
+      await manejarRegistro(numeroDeTelefono, textoReg, acceso.usuario);
       return;
     }
 

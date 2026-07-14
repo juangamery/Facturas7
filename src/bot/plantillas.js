@@ -189,6 +189,27 @@ Estamos investigando. Intentá de nuevo en unos minutos.`,
 
 Ejemplo: 15000 (para $15.000)`,
 
+  // ===== REGISTRO AUTOMÁTICO + PAGO =====
+  REG_BIENVENIDA: `👋 ¡Hola! Soy tu asistente de facturación por WhatsApp. Emito tus facturas en segundos, hablando normal.
+
+Para empezar, ¿cuál es tu *nombre o razón social*?`,
+
+  REG_PEDIR_EMAIL: (nombre) => `¡Genial, ${nombre}! 📧 ¿Cuál es tu *email*? (lo uso para tu suscripción y comprobantes)`,
+
+  REG_TRIAL_OK: `🎉 ¡Listo! Tenés *7 días gratis* para probar. Mandame los datos de tu factura cuando quieras (podés tirar todo junto: cliente, documento, concepto e importe).`,
+
+  REG_LINK_PAGO: (url, trial) => trial
+    ? `Cuando quieras dejarlo activo, suscribite acá 👇 (podés hacerlo ahora o antes de que terminen los 7 días):
+
+${url}
+
+Son $299/mes, se renueva solo. Cancelás cuando quieras.`
+    : `Para activar tu cuenta, suscribite acá 👇
+
+${url}
+
+Son $299/mes, se renueva solo. Apenas pagues, te aviso y ya podés facturar.`,
+
   // ===== ACTIVACIÓN PRODUCCIÓN (delegación AFIP) =====
   ACTIVAR_ELEGIR: `🚀 Para emitir facturas *reales* (con validez fiscal) hay que habilitar tu AFIP una sola vez. Elegí:
 
