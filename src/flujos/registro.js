@@ -107,5 +107,16 @@ async function enviarLinkPago(numeroDeTelefono, usuario, trial) {
     estado_registro: trial ? 'trial' : 'esperando_pago',
   });
   logger.info(`💳 Link de pago enviado a usuario ${usuario.id}`);
-  await enviarTexto(numeroDeTelefono, PLANTILLAS.avisoVencimiento(sub.init_point, trial));
+
+  // Calcular fecha vencimiento (7 días desde hoy)
+  const ahora = new Date();
+  const vencimiento = new Date(ahora.getTime() + SIETE_DIAS * 1000);
+  const fechaFormato = `${vencimiento.getDate()}/${vencimiento.getMonth() + 1}/${vencimiento.getFullYear()}`;
+
+  if (trial) {
+    await enviarTexto(numeroDeTelefono,
+      `🎉 Trial activado por 7 días. Vence el ${fechaFormato}.\n\nLink para renovar cuando quieras:\n${sub.init_point}`);
+  } else {
+    await enviarTexto(numeroDeTelefono, PLANTILLAS.avisoVencimiento(fechaFormato, sub.init_point));
+  }
 }
