@@ -23,6 +23,7 @@ import {
   verMisDatos,
   cancelarOperacion,
   procesarAudioConversacional,
+  siguientePaso,
   PASOS,
 } from './conversacion.js';
 import procesarImagen from '../flujos/imagen.js';
