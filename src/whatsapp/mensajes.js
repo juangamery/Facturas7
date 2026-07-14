@@ -5,6 +5,7 @@
 // Reemplaza la capa Wappfly. Mantiene las mismas firmas de export.
 
 import { logger, logearError } from '../logger.js';
+import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
 import https from 'https';
@@ -68,23 +69,30 @@ export async function enviarTexto(numero, texto) {
 async function subirMedia(buffer, mimetype, filename) {
   const form = new FormData();
   form.append('messaging_product', 'whatsapp');
-  form.append('file', buffer, { filename, contentType: mimetype });
   form.append('type', mimetype);
+  form.append('file', buffer, { filename, contentType: mimetype });
 
-  const respuesta = await fetch(`${GRAPH_BASE}/${PHONE_NUMBER_ID}/media`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${TOKEN}`,
-      ...form.getHeaders()
-    },
-    body: form
-  });
-
-  const data = await respuesta.json();
-  if (!respuesta.ok || !data.id) {
-    throw new Error(`Meta media upload error: ${data.error?.message || respuesta.statusText}`);
+  // Se usa axios (no el fetch global): undici no consume bien el stream
+  // multipart de form-data y Meta recibía el body sin el parámetro `file`.
+  try {
+    const { data } = await axios.post(
+      `${GRAPH_BASE}/${PHONE_NUMBER_ID}/media`,
+      form,
+      {
+        headers: {
+          Authorization: `Bearer ${TOKEN}`,
+          ...form.getHeaders(),
+        },
+        maxBodyLength: Infinity,
+        maxContentLength: Infinity,
+      }
+    );
+    if (!data.id) throw new Error('respuesta sin media id');
+    return data.id;
+  } catch (error) {
+    const msg = error.response?.data?.error?.message || error.message;
+    throw new Error(`Meta media upload error: ${msg}`);
   }
-  return data.id;
 }
 
 // ==========================================
