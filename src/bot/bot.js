@@ -8,10 +8,22 @@
 
 import { verificarAcceso, enviarMensajeDeAccesoDenegado } from './acceso.js';
 import { enviarTexto } from '../whatsapp/mensajes.js';
-import { MENSAJES } from './plantillas.js';
+import * as PLANTILLAS from '../whatsapp/plantillas.js';
 import { logger, logearError } from '../logger.js';
-import { obtenerEstado } from './conversacion.js';
-import procesarTexto from '../flujos/texto.js';
+import {
+  obtenerEstado,
+  mostrarMenuPrincipal,
+  limpiarConversacion,
+  detectarIntencion,
+  esConfirmacionSI,
+  esConfirmacionNO,
+  procesarOnboarding,
+  procesarFacturaTexto,
+  verUltimaFactura,
+  verMisDatos,
+  cancelarOperacion,
+  PASOS,
+} from './conversacion.js';
 import procesarImagen from '../flujos/imagen.js';
 import { procesarAudio } from '../ia/audio.js';
 
@@ -77,7 +89,7 @@ export default async function procesarMensaje(mensaje, phoneID, displayPhoneNumb
   } catch (error) {
     logearError(error, `Procesamiento de mensaje ${messageID}`);
     try {
-      await enviarTexto(numeroDeTelefono, MENSAJES.ERROR_GENERICO);
+      await enviarTexto(numeroDeTelefono, PLANTILLAS.ERROR_GENERAL);
     } catch (e) {
       logger.error(`Error enviando mensaje de error: ${e.message}`);
     }
@@ -89,41 +101,99 @@ export default async function procesarMensaje(mensaje, phoneID, displayPhoneNumb
 // ==========================================
 
 async function procesarTextoGenerico(numeroDeTelefono, texto, usuario) {
-  // Obtener estado actual de conversación
-  const conversacion = await obtenerEstado(numeroDeTelefono);
-  const paso = conversacion?.paso || 'menu_principal';
-  const datos = conversacion?.datos ? JSON.parse(conversacion.datos) : {};
+  try {
+    // Obtener estado de conversación
+    const conversacion = await obtenerEstado(numeroDeTelefono);
+    const paso = conversacion?.paso;
+    const datosActuales = conversacion?.datos
+      ? JSON.parse(conversacion.datos)
+      : {};
 
-  // Normalizar texto
-  const textoNormalizado = texto.trim().toUpperCase();
-
-  // Detectar intenciones rápidas (palabras clave)
-  if (textoNormalizado === 'CANCELAR') {
-    const { limpiarConversacion } = await import('./conversacion.js');
-    await limpiarConversacion(numeroDeTelefono);
-    await enviarTexto(numeroDeTelefono, MENSAJES.CANCELADO);
-    return;
-  }
-
-  // Primer contacto (sin conversación previa).
-  if (!conversacion) {
-    // Falta onboarding → arrancar setup.
-    if (!usuario.cuit || !usuario.punto_venta) {
-      const { mostrarMenuPrincipal } = await import('./conversacion.js');
-      await mostrarMenuPrincipal(numeroDeTelefono, usuario);
-      logger.info(`👋 Primer contacto de ${numeroDeTelefono} → onboarding`);
+    // CANCELAR en cualquier momento
+    if (detectarIntencion(texto) === 'CANCELAR') {
+      await cancelarOperacion(numeroDeTelefono);
       return;
     }
-    // Ya está listo: interpretar directo lo que escribió (o audio dictado).
-    const { manejarFacturaNatural } = await import('../flujos/natural.js');
-    await manejarFacturaNatural(numeroDeTelefono, texto, usuario, {});
-    logger.info(`👋 Primer contacto (onboarded) de ${numeroDeTelefono} → natural`);
-    return;
-  }
 
-  // Llamar a procesarTexto
-  await procesarTexto(numeroDeTelefono, texto, usuario, paso, datos);
-  logger.info(`📝 Texto recibido (paso: ${paso}): ${texto.substring(0, 50)}`);
+    // Primer contacto (sin conversación)
+    if (!conversacion) {
+      // Necesita onboarding
+      if (!usuario.cuit || !usuario.punto_venta) {
+        await mostrarMenuPrincipal(numeroDeTelefono, usuario);
+        logger.info(`👋 Primer contacto ${numeroDeTelefono} → onboarding`);
+        return;
+      }
+      // Ya está completo → menú principal
+      await mostrarMenuPrincipal(numeroDeTelefono, usuario);
+      logger.info(`✅ Usuario ${numeroDeTelefono} listo → menú`);
+      return;
+    }
+
+    // ONBOARDING EN PROGRESO
+    if (
+      paso === PASOS.ONBOARDING_CUIT ||
+      paso === PASOS.ONBOARDING_RAZON_SOCIAL ||
+      paso === PASOS.ONBOARDING_DOMICILIO ||
+      paso === PASOS.ONBOARDING_CONDICION_IVA ||
+      paso === PASOS.ONBOARDING_PUNTO_VENTA ||
+      paso === PASOS.ONBOARDING_CONFIRMACION
+    ) {
+      await procesarOnboarding(numeroDeTelefono, texto, paso, datosActuales);
+      return;
+    }
+
+    // MENÚ PRINCIPAL → detectar intención
+    if (paso === PASOS.MENU_PRINCIPAL) {
+      const intencion = detectarIntencion(texto);
+
+      if (intencion === 'FACTURA') {
+        await procesarFacturaTexto(
+          numeroDeTelefono,
+          PLANTILLAS.PEDIR_NOMBRE_CLIENTE,
+          PASOS.FACTURA_NOMBRE_CLIENTE,
+          {}
+        );
+        // Guardar paso
+        const { siguientePaso } = await import('./conversacion.js');
+        await siguientePaso(numeroDeTelefono, PASOS.FACTURA_NOMBRE_CLIENTE);
+        await enviarTexto(numeroDeTelefono, PLANTILLAS.PEDIR_NOMBRE_CLIENTE);
+        return;
+      }
+
+      if (intencion === 'ULTIMA_FACTURA') {
+        await verUltimaFactura(numeroDeTelefono, usuario);
+        return;
+      }
+
+      if (intencion === 'MIS_DATOS') {
+        await verMisDatos(numeroDeTelefono, usuario);
+        return;
+      }
+
+      // No entendió
+      await mostrarMenuPrincipal(numeroDeTelefono, usuario);
+      return;
+    }
+
+    // FLUJO FACTURA EN PROGRESO
+    if (
+      paso === PASOS.FACTURA_NOMBRE_CLIENTE ||
+      paso === PASOS.FACTURA_DOCUMENTO_CLIENTE ||
+      paso === PASOS.FACTURA_CONCEPTO ||
+      paso === PASOS.FACTURA_IMPORTE ||
+      paso === PASOS.FACTURA_CONFIRMACION
+    ) {
+      await procesarFacturaTexto(numeroDeTelefono, texto, paso, datosActuales);
+      return;
+    }
+
+    // Fallback: mostrar menú
+    await mostrarMenuPrincipal(numeroDeTelefono, usuario);
+
+  } catch (error) {
+    logearError(error, `Texto ${numeroDeTelefono}`);
+    await enviarTexto(numeroDeTelefono, PLANTILLAS.ERROR_GENERAL);
+  }
 }
 
 async function procesarImagenGenerico(numeroDeTelefono, imagenID, usuario) {
@@ -142,7 +212,7 @@ async function procesarImagenGenerico(numeroDeTelefono, imagenID, usuario) {
 
   } catch (error) {
     logearError(error, `Procesamiento imagen ${imagenID}`);
-    await enviarTexto(numeroDeTelefono, MENSAJES.ERROR_GENERICO);
+    await enviarTexto(numeroDeTelefono, PLANTILLAS.ERROR_GENERAL);
   }
 }
 
