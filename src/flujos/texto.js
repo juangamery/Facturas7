@@ -280,8 +280,11 @@ async function confirmarFactura(numeroDeTelefono, texto, usuario) {
   }
 
   if (decision === 'no') {
-    await limpiarConversacion(numeroDeTelefono);
-    await enviarTexto(numeroDeTelefono, 'Listo, la descarté. Cuando quieras arrancamos otra. 👍');
+    // NO borrar datos: el usuario quiere corregir/agregar algo, no descartar.
+    // Se mantiene todo lo cargado y volvemos a modo recopilar.
+    await siguientePaso(numeroDeTelefono, PASOS.RECOPILANDO);
+    await enviarTexto(numeroDeTelefono,
+      'Dale, ¿qué querés cambiar? Decime el dato corregido (ej: _"el importe 8000"_ o _"el cliente es Pedro"_).\n\nSi querés descartarla, escribí CANCELAR.');
     return;
   }
 

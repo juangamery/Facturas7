@@ -13,7 +13,10 @@ const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const MODELO = 'llama-3.3-70b-versatile';
 
+// Campos obligatorios para poder emitir
 const CAMPOS = ['razon_social_cliente', 'documento_cliente', 'concepto', 'importe'];
+// Campos opcionales que también acumulamos si aparecen (no bloquean la emisión)
+const CAMPOS_OPCIONALES = ['condicion_venta'];
 
 // Palabras que indican confirmación / negación (rápido, sin llamar a la IA)
 const SI = ['si', 'sí', 'dale', 'ok', 'oka', 'okey', 'confirmo', 'confirmar', 'listo',
@@ -42,6 +45,7 @@ export async function interpretarFactura(texto, datosPrevios = {}) {
     documento_cliente: datosPrevios.documento_cliente || null,
     concepto: datosPrevios.concepto || null,
     importe: datosPrevios.importe || null,
+    condicion_venta: datosPrevios.condicion_venta || null,
   });
 
   const prompt = `Sos el asistente de un sistema de facturación electrónica argentino (monotributo, Factura C). El usuario habla en lenguaje natural, informal, argentino. Puede dar todos los datos juntos o de a poco.
@@ -58,13 +62,15 @@ Devolvé ÚNICAMENTE un JSON válido con esta forma exacta:
   "razon_social_cliente": "nombre o razón social del cliente, o null",
   "documento_cliente": "solo dígitos del CUIT (11) o DNI (7-8), o 'CF' si es consumidor final, o null",
   "concepto": "descripción de lo que se factura, o null",
-  "importe": número en pesos sin puntos ni comas, o null
+  "importe": número en pesos sin puntos ni comas, o null,
+  "condicion_venta": "medio de pago: Contado | Tarjeta de Débito | Tarjeta de Crédito | Cuenta Corriente | Cheque | Transferencia Bancaria | Otra, o null"
 }
 
 Reglas:
 - "intencion": "factura" si está pidiendo/armando una factura o dando datos de una. "cancelar" si quiere cancelar/parar. "saludo" si solo saluda. "otro" si no tiene que ver.
 - Documento: extraé SOLO los números. "20-12345678-9" -> "20123456789". "DNI 30111222" -> "30111222". Si dice consumidor final, final, sin datos, no tiene CUIT -> "CF".
 - Importe: "15 mil"/"15.000"/"quince mil" -> 15000. Solo el número.
+- condicion_venta: "efectivo"/"en mano" -> "Contado". "débito" -> "Tarjeta de Débito". "crédito" -> "Tarjeta de Crédito". "transferencia" -> "Transferencia Bancaria". "cuenta corriente" -> "Cuenta Corriente". Si no lo menciona -> null.
 - Mantené los datos previos que no se contradigan. Null solo si nunca se dio ese dato.
 - Sin texto extra, solo el JSON.`;
 
@@ -86,7 +92,7 @@ Reglas:
 
     // Merge: lo nuevo pisa a lo previo solo si no es null/undefined
     const campos = { ...datosPrevios };
-    for (const k of CAMPOS) {
+    for (const k of [...CAMPOS, ...CAMPOS_OPCIONALES]) {
       const v = parsed[k];
       if (v !== null && v !== undefined && String(v).trim() !== '' && String(v).toLowerCase() !== 'null') {
         campos[k] = k === 'importe' ? String(v).replace(/[^\d.]/g, '') : String(v).trim();

@@ -44,6 +44,7 @@ export default async function emitirFactura(numeroDeTelefono, usuario) {
       documento_cliente: datos.documento_cliente,
       concepto: datos.concepto,
       importe: datos.importe,
+      condicion_venta: datos.condicion_venta || 'Contado',
       fecha_emision: new Date().toLocaleDateString('es-AR'),
       tipo_comprobante: 'Factura C',
       condicion_iva_cliente: '5', // 5 = Consumidor final por defecto

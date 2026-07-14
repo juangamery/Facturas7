@@ -31,6 +31,7 @@ function resumen(c) {
 • Documento: ${c.documento_cliente}
 • Concepto: ${c.concepto}
 • Importe: $${c.importe}
+• Pago: ${c.condicion_venta || 'Contado'}
 
 ¿La emito? Respondé *sí* o *no* (o decime qué cambiar).`;
 }
