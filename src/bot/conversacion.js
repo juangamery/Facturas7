@@ -490,3 +490,117 @@ export async function procesarTimeout(numeroDeTelefono) {
     logger.error(`[TIMEOUT] Error: ${error.message}`);
   }
 }
+
+// ==========================================
+// PROCESAR AUDIO (Groq transcripción)
+// ==========================================
+
+export async function procesarAudioConversacional(
+  numeroDeTelefono,
+  audioPath,
+  usuario
+) {
+  try {
+    // Enviar mensaje "procesando"
+    await enviarTexto(numeroDeTelefono, PLANTILLAS.AUDIO_RECIBIDO);
+
+    // Transcribir audio con Groq
+    let transcripcion = '';
+    if (process.env.GROQ_API_KEY) {
+      try {
+        const Groq = (await import('groq-sdk')).default;
+        const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+
+        const fs = (await import('fs')).default;
+        const audioBuffer = fs.readFileSync(audioPath);
+
+        const response = await groq.audio.transcriptions.create({
+          file: new File([audioBuffer], 'audio.wav', { type: 'audio/wav' }),
+          model: 'whisper-large-v3-turbo',
+          language: 'es',
+        });
+
+        transcripcion = response.text || '';
+        logger.info(`[AUDIO] Transcrito: ${transcripcion.substring(0, 100)}`);
+      } catch (groqError) {
+        logger.warn(`[GROQ] Transcripción falla: ${groqError.message}`);
+        await enviarTexto(numeroDeTelefono, PLANTILLAS.ERROR_AUDIO);
+        return;
+      }
+    } else {
+      await enviarTexto(numeroDeTelefono, PLANTILLAS.ERROR_AUDIO);
+      return;
+    }
+
+    // Procesar texto transcrito como flujo normal
+    if (!transcripcion) {
+      await enviarTexto(numeroDeTelefono, PLANTILLAS.ERROR_AUDIO);
+      return;
+    }
+
+    // Obtener estado de conversación
+    const conversacion = await obtenerEstado(numeroDeTelefono);
+    const paso = conversacion?.paso;
+    const datosActuales = conversacion?.datos
+      ? JSON.parse(conversacion.datos)
+      : {};
+
+    // Aplicar misma lógica que texto
+    if (!conversacion || paso === PASOS.MENU_PRINCIPAL) {
+      // En menú: detectar intención del audio
+      const intencion = detectarIntencion(transcripcion);
+
+      if (intencion === 'FACTURA') {
+        await siguientePaso(numeroDeTelefono, PASOS.FACTURA_NOMBRE_CLIENTE);
+        await enviarTexto(numeroDeTelefono, PLANTILLAS.PEDIR_NOMBRE_CLIENTE);
+        return;
+      }
+
+      if (intencion === 'ULTIMA_FACTURA') {
+        await verUltimaFactura(numeroDeTelefono, usuario);
+        return;
+      }
+
+      if (intencion === 'MIS_DATOS') {
+        await verMisDatos(numeroDeTelefono, usuario);
+        return;
+      }
+
+      // Default
+      await mostrarMenuPrincipal(numeroDeTelefono, usuario);
+      return;
+    }
+
+    // En flujo: procesar como texto normal
+    if (
+      paso === PASOS.ONBOARDING_CUIT ||
+      paso === PASOS.ONBOARDING_RAZON_SOCIAL ||
+      paso === PASOS.ONBOARDING_DOMICILIO ||
+      paso === PASOS.ONBOARDING_CONDICION_IVA ||
+      paso === PASOS.ONBOARDING_PUNTO_VENTA ||
+      paso === PASOS.ONBOARDING_CONFIRMACION
+    ) {
+      await procesarOnboarding(
+        numeroDeTelefono,
+        transcripcion,
+        paso,
+        datosActuales
+      );
+      return;
+    }
+
+    if (
+      paso === PASOS.FACTURA_NOMBRE_CLIENTE ||
+      paso === PASOS.FACTURA_DOCUMENTO_CLIENTE ||
+      paso === PASOS.FACTURA_CONCEPTO ||
+      paso === PASOS.FACTURA_IMPORTE ||
+      paso === PASOS.FACTURA_CONFIRMACION
+    ) {
+      await procesarFacturaTexto(numeroDeTelefono, transcripcion, paso, datosActuales);
+      return;
+    }
+  } catch (error) {
+    logearError(error, `Audio ${numeroDeTelefono}`);
+    await enviarTexto(numeroDeTelefono, PLANTILLAS.ERROR_GENERAL);
+  }
+}

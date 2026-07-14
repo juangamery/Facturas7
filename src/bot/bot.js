@@ -22,10 +22,10 @@ import {
   verUltimaFactura,
   verMisDatos,
   cancelarOperacion,
+  procesarAudioConversacional,
   PASOS,
 } from './conversacion.js';
 import procesarImagen from '../flujos/imagen.js';
-import { procesarAudio } from '../ia/audio.js';
 
 export default async function procesarMensaje(mensaje, phoneID, displayPhoneNumber) {
   const numeroDeTelefono = mensaje.from;
@@ -218,25 +218,21 @@ async function procesarImagenGenerico(numeroDeTelefono, imagenID, usuario) {
 
 async function procesarAudioGenerico(numeroDeTelefono, audioID, usuario) {
   try {
-    await enviarTexto(numeroDeTelefono, MENSAJES.ANALIZANDO_AUDIO);
+    // Descargar audio desde Wappfly y guardar path
+    const { descargarMediaDeTelefono } = await import('../whatsapp/media.js');
+    const audioPath = await descargarMediaDeTelefono(audioID);
 
-    const audioResultado = await procesarAudio(audioID);
-    const transcripcion = audioResultado?.transcripcion?.trim();
-
-    if (!transcripcion) {
-      await enviarTexto(numeroDeTelefono,
-        '🎤 No pude entender el audio. Mandalo de nuevo o escribime los datos.');
+    if (!audioPath) {
+      await enviarTexto(numeroDeTelefono, PLANTILLAS.ERROR_AUDIO);
       return;
     }
 
-    // Confirmar lo que escuchó y meter la transcripción al mismo pipeline que el texto.
-    await enviarTexto(numeroDeTelefono, `🎤 Escuché: "${transcripcion}"`);
-    await procesarTextoGenerico(numeroDeTelefono, transcripcion, usuario);
-
+    // Procesar con Groq + conversación
+    await procesarAudioConversacional(numeroDeTelefono, audioPath, usuario);
     logger.info(`🎤 Audio procesado de ${numeroDeTelefono}`);
 
   } catch (error) {
     logearError(error, `Procesamiento audio ${audioID}`);
-    await enviarTexto(numeroDeTelefono, MENSAJES.ERROR_GENERICO);
+    await enviarTexto(numeroDeTelefono, PLANTILLAS.ERROR_GENERAL);
   }
 }
