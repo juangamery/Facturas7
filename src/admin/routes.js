@@ -426,6 +426,25 @@ router.post('/clientes/:id/extender', async (req, res) => {
   }
 });
 
+// POST /admin/clientes/:id/mensaje - Enviar WhatsApp al cliente (solo dentro de la ventana 24h)
+router.post('/clientes/:id/mensaje', async (req, res) => {
+  try {
+    const texto = (req.body.texto || '').trim();
+    if (!texto) return res.status(400).json({ error: 'Escribí un mensaje' });
+
+    const usuario = await obtenerUsuarioPorID(req.params.id);
+    if (!usuario) return res.status(404).json({ error: 'Cliente no encontrado' });
+
+    await enviarTexto(usuario.numero_telefono, texto);
+    logger.info(`✉️ Mensaje manual enviado a ${usuario.numero_telefono}`);
+    res.json({ success: true });
+  } catch (error) {
+    // Meta rechaza si la ventana de 24h está cerrada (requiere plantilla aprobada).
+    logearError(error, 'Enviar mensaje manual');
+    res.status(500).json({ error: error.message || 'No se pudo enviar (¿ventana de 24h cerrada?)' });
+  }
+});
+
 // GET /admin/facturas
 router.get('/facturas', async (req, res) => {
   try {
