@@ -9,6 +9,7 @@ import {
   guardarConversacion,
   borrarConversacion,
   obtenerUsuario,
+  actualizarUsuario,
   obtenerFacturasDeUsuario,
   getDB,
 } from '../db.js';
@@ -237,8 +238,17 @@ export async function procesarOnboarding(
       );
     } else if (paso === PASOS.ONBOARDING_CONFIRMACION) {
       if (esConfirmacionSI(texto)) {
-        // TODO: Guardar datos en BD (usuarios table)
+        // Guardar datos acumulados en BD
+        const usuario = await obtenerUsuario(numeroDeTelefono);
+        await actualizarUsuario(usuario.id, {
+          cuit: datosActuales.cuit,
+          razon_social: datosActuales.razon_social,
+          domicilio: datosActuales.domicilio,
+          condicion_iva: datosActuales.condicion_iva,
+          punto_venta: datosActuales.punto_venta,
+        });
         await limpiarConversacion(numeroDeTelefono);
+        await siguientePaso(numeroDeTelefono, PASOS.MENU_PRINCIPAL);
         await enviarTexto(
           numeroDeTelefono,
           '✅ Cuenta configurada. Escribí algo para ver el menú.'
