@@ -12,7 +12,7 @@ import {
 } from '../bot/conversacion.js';
 import { obtenerUsuario, crearUsuario, actualizarUsuario } from '../db.js';
 import { enviarTexto } from '../whatsapp/mensajes.js';
-import { MENSAJES } from '../bot/plantillas.js';
+import * as PLANTILLAS from '../whatsapp/plantillas.js';
 import { crearSuscripcion } from '../mercadopago/suscripcion.js';
 import { logger } from '../logger.js';
 
@@ -30,7 +30,7 @@ export async function manejarRegistro(numeroDeTelefono, texto, usuarioAcceso) {
   if (!usuario) {
     usuario = await crearUsuario(numeroDeTelefono, {});
     await siguientePaso(numeroDeTelefono, PASOS.REG_NOMBRE, {});
-    await enviarTexto(numeroDeTelefono, MENSAJES.REG_BIENVENIDA);
+    await enviarTexto(numeroDeTelefono, PLANTILLAS.BIENVENIDA_NUEVA);
     return;
   }
 
@@ -42,7 +42,7 @@ export async function manejarRegistro(numeroDeTelefono, texto, usuarioAcceso) {
     }
     await actualizarUsuario(usuario.id, { nombre });
     await siguientePaso(numeroDeTelefono, PASOS.REG_EMAIL);
-    await enviarTexto(numeroDeTelefono, MENSAJES.REG_PEDIR_EMAIL(nombre));
+    await enviarTexto(numeroDeTelefono, PLANTILLAS.PEDIR_EMAIL(nombre));
     return;
   }
 
@@ -61,7 +61,7 @@ export async function manejarRegistro(numeroDeTelefono, texto, usuarioAcceso) {
       fecha_vencimiento: ahora + SIETE_DIAS,
     });
     await limpiarConversacion(numeroDeTelefono);
-    await enviarTexto(numeroDeTelefono, MENSAJES.REG_TRIAL_OK);
+    await enviarTexto(numeroDeTelefono, PLANTILLAS.BIENVENIDA_NUEVA);
     // Mandar también el link de pago para que se suscriba cuando quiera.
     await enviarLinkPago(numeroDeTelefono, { ...usuario, email }, true);
     return;
@@ -74,7 +74,7 @@ export async function manejarRegistro(numeroDeTelefono, texto, usuarioAcceso) {
 
   // Sin datos y sin paso de registro → arrancar de cero.
   await siguientePaso(numeroDeTelefono, PASOS.REG_NOMBRE, {});
-  await enviarTexto(numeroDeTelefono, MENSAJES.REG_BIENVENIDA);
+  await enviarTexto(numeroDeTelefono, PLANTILLAS.BIENVENIDA_NUEVA);
 }
 
 async function enviarLinkPago(numeroDeTelefono, usuario, trial) {
@@ -88,5 +88,5 @@ async function enviarLinkPago(numeroDeTelefono, usuario, trial) {
     estado_registro: trial ? 'trial' : 'esperando_pago',
   });
   logger.info(`💳 Link de pago enviado a usuario ${usuario.id}`);
-  await enviarTexto(numeroDeTelefono, MENSAJES.REG_LINK_PAGO(sub.init_point, trial));
+  await enviarTexto(numeroDeTelefono, PLANTILLAS.avisoVencimiento(sub.init_point, trial));
 }

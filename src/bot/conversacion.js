@@ -27,6 +27,10 @@ export const PASOS = {
   // Menu principal
   MENU_PRINCIPAL: 'menu_principal',
 
+  // Registro (usuario nuevo sin acceso)
+  REG_NOMBRE: 'reg_nombre',
+  REG_EMAIL: 'reg_email',
+
   // Onboarding
   ONBOARDING_CUIT: 'onboarding_cuit',
   ONBOARDING_RAZON_SOCIAL: 'onboarding_rs',
