@@ -10,11 +10,14 @@ import {
   borrarConversacion,
   obtenerUsuario,
   obtenerFacturasDeUsuario,
+  getDB,
 } from '../db.js';
-import { logger } from '../logger.js';
+import { logger, logearError } from '../logger.js';
 import * as PLANTILLAS from '../whatsapp/plantillas.js';
 import { enviarTexto } from '../whatsapp/mensajes.js';
 import { validarCUIT } from '../facturacion/validaciones.js';
+import { generarPDFFactura } from '../facturacion/pdf.js';
+import { solicitarCAE } from '../facturacion/factura.js';
 
 // ==========================================
 // PASOS / ESTADOS DE LA CONVERSACIÓN
@@ -321,8 +324,88 @@ export async function procesarFacturaTexto(
     } else if (paso === PASOS.FACTURA_CONFIRMACION) {
       if (esConfirmacionSI(texto)) {
         await enviarTexto(numeroDeTelefono, PLANTILLAS.EMITIENDO_FACTURA);
-        // TODO: Generar PDF, solicitar CAE, guardar en BD
-        await limpiarConversacion(numeroDeTelefono);
+
+        // Emitir factura
+        try {
+          const ahora = Math.floor(Date.now() / 1000);
+
+          // Armar datos para PDF + CAE
+          const datosFactura = {
+            numero_factura: `${datosActuales.punto_venta || 1}-${Math.floor(Math.random() * 100000)}`,
+            fecha_emision: new Date().toISOString().split('T')[0],
+            tipo_comprobante: 'Factura C',
+            razon_social_cliente: datosActuales.razon_social_cliente,
+            documento_cliente: datosActuales.documento_cliente || 'CF',
+            concepto: datosActuales.concepto,
+            importe: datosActuales.importe,
+            punto_venta: datosActuales.punto_venta || 1,
+          };
+
+          // Generar PDF
+          let pdfPath;
+          try {
+            pdfPath = await generarPDFFactura({
+              ...datosFactura,
+              domicilio_cliente: '',
+              razon_social_emisor: usuario.razon_social,
+              cuit_emisor: usuario.cuit,
+              domicilio_emisor: usuario.domicilio,
+              condicion_iva: usuario.condicion_iva,
+              cae: 'PENDIENTE',
+            });
+          } catch (pdfError) {
+            logger.warn(`PDF falla: ${pdfError.message}`);
+          }
+
+          // Solicitar CAE a AFIP
+          let cae = 'PENDIENTE';
+          let vencimientoCae = '';
+          try {
+            const respCAE = await solicitarCAE(datosFactura);
+            cae = respCAE?.cae || 'PENDIENTE';
+            vencimientoCae = respCAE?.vencimiento_cae || '';
+          } catch (caeError) {
+            logearError(caeError, 'solicitarCAE');
+          }
+
+          // Guardar factura en BD
+          await getDB().from('facturas').insert({
+            usuario_id: usuario.id,
+            numero_telefono: numeroDeTelefono,
+            fecha_emision: datosFactura.fecha_emision,
+            tipo_comprobante: datosFactura.tipo_comprobante,
+            numero_factura: datosFactura.numero_factura,
+            razon_social_cliente: datosFactura.razon_social_cliente,
+            documento_cliente: datosFactura.documento_cliente,
+            concepto: datosFactura.concepto,
+            importe: datosFactura.importe,
+            cae,
+            vencimiento_cae: vencimientoCae,
+            pdf_path: pdfPath || '',
+            origen: 'whatsapp',
+            creado_en: ahora,
+          });
+
+          // Confirmación al usuario
+          await enviarTexto(
+            numeroDeTelefono,
+            PLANTILLAS.facturaEmitida({
+              tipo_comprobante: datosFactura.tipo_comprobante,
+              numero_factura: datosFactura.numero_factura,
+              cae,
+              vencimiento_cae: vencimientoCae,
+            })
+          );
+
+          await limpiarConversacion(numeroDeTelefono);
+        } catch (error) {
+          logearError(error, 'Emitir factura');
+          await enviarTexto(
+            numeroDeTelefono,
+            PLANTILLAS.errorEmitirFactura(error.message)
+          );
+          await limpiarConversacion(numeroDeTelefono);
+        }
       } else if (esConfirmacionNO(texto)) {
         await siguientePaso(
           numeroDeTelefono,
