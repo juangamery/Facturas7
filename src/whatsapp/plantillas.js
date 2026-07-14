@@ -111,6 +111,13 @@ const INSTRUCCIONES_PUNTO_VENTA = `📋 Para crear tu punto de venta en ARCA seg
 
 Cuando lo tengas escribime el número y continuamos. 👍`;
 
+// Para registro (flujo de usuario desconocido)
+const pedir_nombre_registro = `¿Cuál es tu nombre o razón social?`;
+
+const pedir_email_registro = (nombre) => `¡Genial, ${nombre}! 📧 ¿Cuál es tu email? (lo uso para tu suscripción y comprobantes)`;
+
+const PEDIR_EMAIL = `📧 ¿Cuál es tu email? (lo uso para tu suscripción y comprobantes)`;
+
 const onboardingCompleto = (datos) => `🎉 ¡Todo listo! Tu cuenta está configurada.
 
 Estos son tus datos:
@@ -386,6 +393,11 @@ export {
   CANCELADO,
   TIMEOUT,
   ERROR_GENERAL,
+
+  // Registro (usuario desconocido)
+  pedir_nombre_registro,
+  pedir_email_registro,
+  PEDIR_EMAIL,
 
   // Onboarding
   PEDIR_CUIT,

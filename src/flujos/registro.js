@@ -42,7 +42,7 @@ export async function manejarRegistro(numeroDeTelefono, texto, usuarioAcceso) {
     }
     await actualizarUsuario(usuario.id, { nombre });
     await siguientePaso(numeroDeTelefono, PASOS.REG_EMAIL);
-    await enviarTexto(numeroDeTelefono, PLANTILLAS.PEDIR_EMAIL(nombre));
+    await enviarTexto(numeroDeTelefono, PLANTILLAS.pedir_email_registro(nombre));
     return;
   }
 
