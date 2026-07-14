@@ -118,6 +118,32 @@ const pedir_email_registro = (nombre) => `¡Genial, ${nombre}! 📧 ¿Cuál es t
 
 const PEDIR_EMAIL = `📧 ¿Cuál es tu email? (lo uso para tu suscripción y comprobantes)`;
 
+const METODO_REGISTRO = `📝 ¿Cómo quieres registrarte?
+
+1️⃣ Paso a paso (preguntas una por una)
+2️⃣ Todo de una vez (envía todos los datos)
+
+Respondé con 1 o 2.`;
+
+const INSTRUCCIONES_TODO_JUNTO = `📋 Enviá los datos en este orden, separados por línea nueva:
+
+1. Nombre o razón social
+2. CUIT (sin guiones, ej: 20347351300)
+3. Email
+4. Domicilio
+5. Condición IVA (1=Monotributista, 2=Responsable Inscripto)
+6. Punto de venta (número)
+
+Ejemplo:
+\`\`\`
+Carlos Federico GUNTHER
+20347351300
+cf@mail.com
+Felix de Azara 1815
+1
+2
+\`\`\``;
+
 const onboardingCompleto = (datos) => `🎉 ¡Todo listo! Tu cuenta está configurada.
 
 Estos son tus datos:
@@ -398,6 +424,8 @@ export {
   pedir_nombre_registro,
   pedir_email_registro,
   PEDIR_EMAIL,
+  METODO_REGISTRO,
+  INSTRUCCIONES_TODO_JUNTO,
 
   // Onboarding
   PEDIR_CUIT,

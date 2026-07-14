@@ -28,11 +28,88 @@ export async function manejarRegistro(numeroDeTelefono, texto, usuarioAcceso) {
   const conv = await obtenerEstado(numeroDeTelefono);
   const paso = conv?.paso;
 
-  // Desconocido total: crear y pedir nombre.
+  // Desconocido total: crear y preguntar método registro.
   if (!usuario) {
     usuario = await crearUsuario(numeroDeTelefono, {});
-    await siguientePaso(numeroDeTelefono, PASOS.REG_NOMBRE, {});
-    await enviarTexto(numeroDeTelefono, PLANTILLAS.BIENVENIDA_NUEVA);
+    await siguientePaso(numeroDeTelefono, PASOS.REG_METODO, {});
+    await enviarTexto(numeroDeTelefono, PLANTILLAS.METODO_REGISTRO);
+    return;
+  }
+
+  // Usuario elige método: paso a paso (1) o todo junto (2)
+  if (paso === PASOS.REG_METODO) {
+    const opcion = texto.trim();
+    if (opcion === '1') {
+      await siguientePaso(numeroDeTelefono, PASOS.REG_NOMBRE);
+      await enviarTexto(numeroDeTelefono, PLANTILLAS.pedir_nombre_registro);
+      return;
+    } else if (opcion === '2') {
+      await siguientePaso(numeroDeTelefono, PASOS.REG_TODO_JUNTO);
+      await enviarTexto(numeroDeTelefono, PLANTILLAS.INSTRUCCIONES_TODO_JUNTO);
+      return;
+    } else {
+      await enviarTexto(numeroDeTelefono, '❌ Respondé con 1 o 2.');
+      return;
+    }
+  }
+
+  // Todo de una vez: parsear 6 líneas
+  if (paso === PASOS.REG_TODO_JUNTO) {
+    const lineas = texto.trim().split('\n').map(l => l.trim());
+    if (lineas.length < 6) {
+      await enviarTexto(numeroDeTelefono, '❌ Necesito 6 datos (nombre, CUIT, email, domicilio, IVA, punto venta).');
+      return;
+    }
+
+    const [nombre, cuitRaw, email, domicilio, ivaRaw, puntoRaw] = lineas;
+
+    // Validar CUIT
+    const cuit = cuitRaw.replace(/[-.\s]/g, '');
+    if (cuit.length !== 11 || isNaN(parseInt(cuit))) {
+      await enviarTexto(numeroDeTelefono, '❌ CUIT inválido. Debe tener 11 dígitos sin guiones.');
+      return;
+    }
+
+    // Validar email
+    if (!EMAIL_RE.test(email)) {
+      await enviarTexto(numeroDeTelefono, '❌ Email inválido.');
+      return;
+    }
+
+    // Validar IVA (1 o 2)
+    const iva = parseInt(ivaRaw);
+    if (![1, 2].includes(iva)) {
+      await enviarTexto(numeroDeTelefono, '❌ IVA debe ser 1 (Monotributista) o 2 (Responsable Inscripto).');
+      return;
+    }
+
+    // Validar punto venta (número)
+    const punto = parseInt(puntoRaw);
+    if (isNaN(punto) || punto < 1) {
+      await enviarTexto(numeroDeTelefono, '❌ Punto de venta debe ser un número válido.');
+      return;
+    }
+
+    // Guardar todo en BD
+    const ahora = Math.floor(Date.now() / 1000);
+    await actualizarUsuario(usuario.id, {
+      nombre,
+      email,
+      cuit,
+      razon_social: nombre,
+      domicilio,
+      condicion_iva: iva === 1 ? 'Monotributista' : 'Responsable Inscripto',
+      punto_venta: punto,
+      activo: 1,
+      plan: 'trial',
+      estado_registro: 'trial',
+      fecha_vencimiento: ahora + SIETE_DIAS,
+    });
+
+    await limpiarConversacion(numeroDeTelefono);
+    await siguientePaso(numeroDeTelefono, PASOS.MENU_PRINCIPAL, {});
+    await enviarTexto(numeroDeTelefono, '✅ Cuenta configurada. Escribí algo para ver el menú.');
+    await enviarLinkPago(numeroDeTelefono, { id: usuario.id, email, nombre, cuit }, true);
     return;
   }
 
