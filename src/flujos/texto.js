@@ -18,6 +18,8 @@ import { MENSAJES } from '../bot/plantillas.js';
 import { logger } from '../logger.js';
 import { validarCUIT, validarDocumento, validarImporte } from '../facturacion/validaciones.js';
 import { actualizarUsuario } from '../db.js';
+import { manejarFacturaNatural, ajustarEnConfirmacion } from './natural.js';
+import { interpretarConfirmacion } from '../ia/interpretar.js';
 
 export default async function procesarTexto(numeroDeTelefono, texto, usuario, paso, datos) {
   try {
@@ -48,7 +50,12 @@ export default async function procesarTexto(numeroDeTelefono, texto, usuario, pa
       return await validarYGuardarPuntoVenta(numeroDeTelefono, texto, usuario);
     }
 
-    // ===== FLUJO FACTURA (Datos de factura) =====
+    // ===== FLUJO NATURAL (lenguaje libre / audio) =====
+    if (paso === PASOS.RECOPILANDO) {
+      return await manejarFacturaNatural(numeroDeTelefono, texto, usuario, datos);
+    }
+
+    // ===== FLUJO FACTURA (Datos de factura - legacy paso a paso) =====
     if (paso === PASOS.FLUJO_CLIENTE) {
       return await validarYGuardarCliente(numeroDeTelefono, texto, usuario);
     }
@@ -62,7 +69,7 @@ export default async function procesarTexto(numeroDeTelefono, texto, usuario, pa
       return await validarYGuardarImporte(numeroDeTelefono, texto, usuario);
     }
     if (paso === PASOS.CONFIRMACION_FACTURA) {
-      return await confirmarFactura(numeroDeTelefono, textoNorm, usuario);
+      return await confirmarFactura(numeroDeTelefono, texto, usuario);
     }
 
     // ===== MENÚ PRINCIPAL =====
@@ -262,41 +269,33 @@ async function validarYGuardarImporte(numeroDeTelefono, texto, usuario) {
 
 // ===== CONFIRMACIÓN =====
 
-async function confirmarFactura(numeroDeTelefono, textoNorm, usuario) {
-  if (textoNorm === 'SI' || textoNorm === 'SÍ') {
-    // Emisor real: pide CAE a AFIP, genera PDF y lo manda por WhatsApp
+async function confirmarFactura(numeroDeTelefono, texto, usuario) {
+  const decision = interpretarConfirmacion(texto);
+
+  if (decision === 'si') {
     logger.info(`✅ Factura confirmada para ${numeroDeTelefono}`);
     const { default: emitirFactura } = await import('./confirmacion.js');
     await emitirFactura(numeroDeTelefono, usuario);
     return;
   }
 
-  if (textoNorm === 'NO') {
+  if (decision === 'no') {
     await limpiarConversacion(numeroDeTelefono);
-    await enviarTexto(numeroDeTelefono,
-      'Cancelado. Volvemos al menú.');
-    await mostrarMenuPrincipal(numeroDeTelefono, usuario);
+    await enviarTexto(numeroDeTelefono, 'Listo, la descarté. Cuando quieras arrancamos otra. 👍');
     return;
   }
 
-  await enviarTexto(numeroDeTelefono,
-    '❌ Respondé SI o NO');
+  // Ni sí ni no: probablemente quiere corregir/agregar un dato → reinterpretar
+  await ajustarEnConfirmacion(numeroDeTelefono, texto, usuario);
 }
 
 // ===== MENÚ PRINCIPAL =====
 
 async function procesarMenuPrincipal(numeroDeTelefono, textoNorm, usuario) {
   if (textoNorm === '1') {
-    // Nueva factura
-    await siguientePaso(numeroDeTelefono, PASOS.FLUJO_CLIENTE);
+    await siguientePaso(numeroDeTelefono, PASOS.RECOPILANDO, {});
     await enviarTexto(numeroDeTelefono,
-      '📋 Nueva factura.\n\n¿A nombre de quién va?');
-    return;
-  }
-
-  if (textoNorm === '2') {
-    await enviarTexto(numeroDeTelefono,
-      '📊 Función no disponible aún.');
+      '📋 Dale. Decime a quién le facturás, qué y por cuánto.\n\nPodés tirar todo junto, ej:\n_"Facturá a Juan Pérez, CUIT 20-12345678-9, diseño de logo, 15000"_');
     return;
   }
 
@@ -306,7 +305,7 @@ async function procesarMenuPrincipal(numeroDeTelefono, textoNorm, usuario) {
     return;
   }
 
-  // Off-topic o input inválido
-  await enviarTexto(numeroDeTelefono,
-    '❌ No entiendo.\n\n1️⃣ Emitir factura\n2️⃣ Última factura\n3️⃣ Mis datos\n\nResponde 1, 2 o 3');
+  // Cualquier otra cosa: intentar interpretarla como pedido de factura.
+  // El usuario puede escribir directo "hacele una factura a..." sin elegir 1.
+  await manejarFacturaNatural(numeroDeTelefono, textoNorm, usuario, {});
 }

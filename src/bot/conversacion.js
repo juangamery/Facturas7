@@ -27,6 +27,7 @@ export const PASOS = {
   FLUJO_DOCUMENTO: 'flujo_documento',
   FLUJO_CONCEPTO: 'flujo_concepto',
   FLUJO_IMPORTE: 'flujo_importe',
+  RECOPILANDO: 'recopilando',
   CONFIRMACION_FACTURA: 'confirmacion_factura',
 
   ESPERANDO_RESPUESTA: 'esperando_respuesta'

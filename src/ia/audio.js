@@ -32,9 +32,10 @@ async function descargarAudio(audioID) {
   try {
     const token = process.env.WHATSAPP_TOKEN;
 
-    // Obtener URL del audio
+    // Obtener URL del audio (Graph API de WhatsApp/Meta)
+    const version = process.env.WHATSAPP_API_VERSION || 'v21.0';
     const respMeta = await axios.get(
-      `https://graph.instagram.com/v18.0/${audioID}`,
+      `https://graph.facebook.com/${version}/${audioID}`,
       { headers: { Authorization: `Bearer ${token}` } }
     );
 
@@ -182,16 +183,11 @@ export async function procesarAudio(audioID) {
     // Convertir
     rutaMp3 = await convertirOggAMp3(rutaOgg);
 
-    // Transcribir
+    // Transcribir. La extracción de datos la hace el flujo natural (Groq NLU),
+    // así el audio pasa por el mismo pipeline que el texto.
     const transcripcion = await transcribirAudio(rutaMp3);
 
-    // Extraer datos
-    const datos = await extraerDatos(transcripcion);
-
-    return {
-      transcripcion,
-      datos
-    };
+    return { transcripcion };
 
   } finally {
     // Limpiar archivos temporales

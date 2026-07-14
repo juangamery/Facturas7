@@ -97,12 +97,19 @@ async function procesarTextoGenerico(numeroDeTelefono, texto, usuario) {
     return;
   }
 
-  // Primer contacto (sin conversación previa): mostrar menú / iniciar onboarding.
-  // mostrarMenuPrincipal detecta si falta CUIT/punto_venta → arranca onboarding.
+  // Primer contacto (sin conversación previa).
   if (!conversacion) {
-    const { mostrarMenuPrincipal } = await import('./conversacion.js');
-    await mostrarMenuPrincipal(numeroDeTelefono, usuario);
-    logger.info(`👋 Primer contacto de ${numeroDeTelefono} → menú/onboarding`);
+    // Falta onboarding → arrancar setup.
+    if (!usuario.cuit || !usuario.punto_venta) {
+      const { mostrarMenuPrincipal } = await import('./conversacion.js');
+      await mostrarMenuPrincipal(numeroDeTelefono, usuario);
+      logger.info(`👋 Primer contacto de ${numeroDeTelefono} → onboarding`);
+      return;
+    }
+    // Ya está listo: interpretar directo lo que escribió (o audio dictado).
+    const { manejarFacturaNatural } = await import('../flujos/natural.js');
+    await manejarFacturaNatural(numeroDeTelefono, texto, usuario, {});
+    logger.info(`👋 Primer contacto (onboarded) de ${numeroDeTelefono} → natural`);
     return;
   }
 
@@ -136,23 +143,17 @@ async function procesarAudioGenerico(numeroDeTelefono, audioID, usuario) {
     await enviarTexto(numeroDeTelefono, MENSAJES.ANALIZANDO_AUDIO);
 
     const audioResultado = await procesarAudio(audioID);
+    const transcripcion = audioResultado?.transcripcion?.trim();
 
-    if (!audioResultado) {
-      await enviarTexto(numeroDeTelefono, MENSAJES.ERROR_GENERICO);
+    if (!transcripcion) {
+      await enviarTexto(numeroDeTelefono,
+        '🎤 No pude entender el audio. Mandalo de nuevo o escribime los datos.');
       return;
     }
 
-    const { siguientePaso, guardarDato, PASOS } = await import('./conversacion.js');
-    await guardarDato(numeroDeTelefono, 'razon_social_cliente', audioResultado.datos?.razon_social);
-    await guardarDato(numeroDeTelefono, 'documento_cliente', audioResultado.datos?.documento);
-    await guardarDato(numeroDeTelefono, 'concepto', audioResultado.datos?.concepto);
-    await guardarDato(numeroDeTelefono, 'importe', audioResultado.datos?.importe);
-    await siguientePaso(numeroDeTelefono, PASOS.CONFIRMACION_FACTURA);
-
-    await enviarTexto(
-      numeroDeTelefono,
-      MENSAJES.AUDIO_TRANSCRIBIDO(audioResultado.datos, audioResultado.transcripcion)
-    );
+    // Confirmar lo que escuchó y meter la transcripción al mismo pipeline que el texto.
+    await enviarTexto(numeroDeTelefono, `🎤 Escuché: "${transcripcion}"`);
+    await procesarTextoGenerico(numeroDeTelefono, transcripcion, usuario);
 
     logger.info(`🎤 Audio procesado de ${numeroDeTelefono}`);
 

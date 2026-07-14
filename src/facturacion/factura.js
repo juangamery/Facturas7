@@ -20,17 +20,21 @@ function crearAfip(cuitEmisor) {
 }
 
 // Tipo de documento receptor: 80 = CUIT, 96 = DNI, 99 = Consumidor final
+// El NLU entrega dígitos puros, así que decidimos por longitud.
 function getTipoDocumento(documento) {
   const d = String(documento || '').toUpperCase().trim();
   if (d === 'CF' || d === 'CONSUMIDOR FINAL' || d === '') return 99;
+  const digitos = d.replace(/\D/g, '');
+  if (digitos.length === 11) return 80; // CUIT
+  if (digitos.length === 7 || digitos.length === 8) return 96; // DNI
   if (d.startsWith('DNI')) return 96;
-  return 80; // CUIT
+  return 99; // sin doc válido → consumidor final
 }
 
 function parsearDocumento(documento) {
   const d = String(documento || '').toUpperCase().trim();
   if (d === 'CF' || d === 'CONSUMIDOR FINAL' || d === '') return 0;
-  return parseInt(d.replace('DNI', '').replace(/\D/g, ''), 10) || 0;
+  return parseInt(d.replace(/\D/g, ''), 10) || 0;
 }
 
 // Fecha AFIP: YYYYMMDD
@@ -138,9 +142,11 @@ export function validarDatosFactura(datos) {
 
   if (!datos.documento_cliente) {
     errores.push('Falta documento del cliente');
-  } else if (datos.documento_cliente !== 'CF' &&
-    !String(datos.documento_cliente).match(/^(\d{2}-?\d{8}-?\d|DNI\s*\d{7,8})$/i)) {
-    errores.push('Documento inválido. Formatos: 20-12345678-9, DNI 12345678, CF');
+  } else if (String(datos.documento_cliente).toUpperCase().trim() !== 'CF') {
+    const dig = String(datos.documento_cliente).replace(/\D/g, '');
+    if (![7, 8, 11].includes(dig.length)) {
+      errores.push('Documento inválido. CUIT 11 dígitos, DNI 7-8 dígitos, o CF');
+    }
   }
 
   if (!datos.concepto) errores.push('Falta concepto/descripción');
