@@ -41,6 +41,7 @@ export const PASOS = {
   ONBOARDING_DOMICILIO: 'onboarding_domicilio',
   ONBOARDING_CONDICION_IVA: 'onboarding_condicion_iva',
   ONBOARDING_PUNTO_VENTA: 'onboarding_punto_venta',
+  ONBOARDING_CLAVE_FISCAL: 'onboarding_clave_fiscal',
   ONBOARDING_CONFIRMACION: 'onboarding_confirmacion',
 
   // Flujo factura por texto
@@ -339,6 +340,18 @@ export async function procesarOnboarding(
       await guardarDato(numeroDeTelefono, 'punto_venta', texto);
       await siguientePaso(
         numeroDeTelefono,
+        PASOS.ONBOARDING_CLAVE_FISCAL,
+        datosActuales
+      );
+      await enviarTexto(numeroDeTelefono, '🔐 Ahora necesitamos tu clave fiscal de AFIP para autorizar facturas. Escribila (será cifrada y segura).');
+    } else if (paso === PASOS.ONBOARDING_CLAVE_FISCAL) {
+      if (!texto || texto.length < 3) {
+        await enviarTexto(numeroDeTelefono, '⚠️ Clave fiscal muy corta. Revisá e intentá de nuevo.');
+        return;
+      }
+      await guardarDato(numeroDeTelefono, 'clave_fiscal_temp', texto);
+      await siguientePaso(
+        numeroDeTelefono,
         PASOS.ONBOARDING_CONFIRMACION,
         datosActuales
       );
@@ -349,7 +362,9 @@ export async function procesarOnboarding(
       );
     } else if (paso === PASOS.ONBOARDING_CONFIRMACION) {
       if (esConfirmacionSI(texto)) {
-        // Guardar datos acumulados en BD
+        await enviarTexto(numeroDeTelefono, '⏳ Registrando en AFIPSDK...');
+
+        // Guardar datos básicos
         const usuario = await obtenerUsuario(numeroDeTelefono);
         await actualizarUsuario(usuario.id, {
           cuit: datosActuales.cuit,
@@ -358,6 +373,34 @@ export async function procesarOnboarding(
           condicion_iva: datosActuales.condicion_iva,
           punto_venta: datosActuales.punto_venta,
         });
+
+        // Registrar en AFIPSDK automáticamente
+        try {
+          const { registrarUsuarioAFIPSDK } = await import('../facturacion/afipsdk_registro.js');
+          const resultado = await registrarUsuarioAFIPSDK(
+            usuario.id,
+            datosActuales.cuit,
+            datosActuales.clave_fiscal_temp,
+            datosActuales.razon_social
+          );
+
+          if (resultado.exito) {
+            await enviarTexto(numeroDeTelefono, resultado.mensaje);
+          } else {
+            // Si AFIPSDK falla, permitir continuar (puede registrarse después manualmente)
+            await enviarTexto(
+              numeroDeTelefono,
+              `⚠️ ${resultado.mensaje}\n\nPuedes intentar registrarte manualmente en https://www.afip.gob.ar`
+            );
+          }
+        } catch (afipError) {
+          logger.warn(`AFIPSDK registro falla: ${afipError.message}`);
+          await enviarTexto(
+            numeroDeTelefono,
+            '⚠️ No pude registrar en AFIPSDK. Podés intentar manualmente después.'
+          );
+        }
+
         await limpiarConversacion(numeroDeTelefono);
         await siguientePaso(numeroDeTelefono, PASOS.MENU_PRINCIPAL);
         await enviarTexto(
