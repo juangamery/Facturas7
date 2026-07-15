@@ -17,6 +17,7 @@ import { enviarTexto } from '../whatsapp/mensajes.js';
 import * as PLANTILLAS from '../whatsapp/plantillas.js';
 import { crearSuscripcion } from '../mercadopago/suscripcion.js';
 import { logger } from '../logger.js';
+import Groq from 'groq-sdk';
 
 const SIETE_DIAS = 7 * 24 * 60 * 60;
 const EMAIL_RE = /^[a-zA-Z0-9._%-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
@@ -63,7 +64,6 @@ export async function manejarRegistro(numeroDeTelefono, texto, usuarioAcceso) {
 
     // Groq clasifica cada línea
     try {
-      const Groq = (await import('groq-sdk')).default;
       const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
       const prompt = `Clasificar estas 6 líneas de datos de registro. NO IMPORTA el orden.
