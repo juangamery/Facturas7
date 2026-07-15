@@ -63,10 +63,14 @@ function fechaAfip() {
 // ==========================================
 export async function solicitarCAE(datosFactura) {
   try {
+    logger.info(`[AFIP DEBUG] Input: cuit=${datosFactura.cuit}, ptoVta=${datosFactura.punto_venta}, tipo=${datosFactura.tipo_comprobante}`);
+
     const produccion = datosFactura.entorno === 'produccion';
     const afip = crearAfip(datosFactura.cuit, produccion);
     const ptoVta = parseInt(datosFactura.punto_venta, 10) || 1;
     const cbteTipo = TIPO_COMPROBANTE[datosFactura.tipoComprobante || datosFactura.tipo_comprobante || 'Factura C'];
+
+    logger.info(`[AFIP DEBUG] ptoVta=${ptoVta}, cbteTipo=${cbteTipo}`);
 
     // Último comprobante emitido → siguiente número
     const ultimo = await afip.ElectronicBilling.getLastVoucher(ptoVta, cbteTipo);
@@ -76,6 +80,8 @@ export async function solicitarCAE(datosFactura) {
     const docNro = parsearDocumento(datosFactura.documento_cliente);
     const importe = Math.round(parseFloat(datosFactura.importe) * 100) / 100;
     const concepto = datosFactura.concepto_afip || 1; // 1=Productos, 2=Servicios, 3=Ambos
+
+    logger.info(`[AFIP DEBUG] docTipo=${docTipo}, docNro=${docNro}, importe=${importe}, concepto=${concepto}`);
 
     // Factura C monotributo: no discrimina IVA (ImpNeto = ImpTotal)
     const data = {
@@ -99,6 +105,7 @@ export async function solicitarCAE(datosFactura) {
       CondicionIVAReceptorId: parseInt(datosFactura.condicion_iva_cliente || 5, 10), // 5 = Consumidor Final
     };
 
+    logger.info(`[AFIP DEBUG] data enviado: ${JSON.stringify(data)}`);
     const res = await afip.ElectronicBilling.createNextVoucher(data);
 
     logger.info(`✅ CAE obtenido: ${res.CAE} (comprobante ${res.voucherNumber})`);
