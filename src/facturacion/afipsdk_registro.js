@@ -85,6 +85,7 @@ async function autorizarWebService(cuit, certificado, clavePrivada, produccion =
       CUIT: parseInt(cuit.replace(/\D/g, '')),
       cert: certificado,
       key: clavePrivada,
+      access_token: process.env.AFIPSDK_TOKEN,
       production: produccion,
     });
 
@@ -111,6 +112,7 @@ async function crearPuntoVenta(cuit, certificado, clavePrivada, produccion = fal
       CUIT: parseInt(cuit.replace(/\D/g, '')),
       cert: certificado,
       key: clavePrivada,
+      access_token: process.env.AFIPSDK_TOKEN,
       production: produccion,
     });
 
@@ -166,8 +168,8 @@ export async function registrarUsuarioAFIPSDK(usuarioId, cuit, clavePrivada, raz
       punto_venta: pvInfo.punto_venta,
       afipsdk_cert: certCifrado,
       afipsdk_key: null, // NO guardamos clave privada
-      afipsdk_entorno: 'homologacion',
-      afipsdk_status: 'autorizado',
+      entorno: 'homologacion',
+      delegacion_estado: 'activa',
       actualizado_en: Math.floor(Date.now() / 1000),
     });
 

@@ -55,7 +55,7 @@ export async function obtenerUsuarioPorID(usuarioID) {
 
 export async function crearUsuario(numeroDeTelefono, datos = {}) {
   const ahora = Math.floor(Date.now() / 1000);
-  const { data } = await getDB()
+  const { data, error } = await getDB()
     .from('usuarios')
     .insert({
       numero_telefono: numeroDeTelefono,
@@ -69,14 +69,22 @@ export async function crearUsuario(numeroDeTelefono, datos = {}) {
     })
     .select()
     .single();
+  if (error) {
+    logger.error(`crearUsuario(${numeroDeTelefono}) falla: ${error.message}`);
+    throw new Error(`No pude crear usuario: ${error.message}`);
+  }
   return data;
 }
 
 export async function actualizarUsuario(usuarioID, datos) {
-  await getDB()
+  const { error } = await getDB()
     .from('usuarios')
     .update(datos)
     .eq('id', usuarioID);
+  if (error) {
+    logger.error(`actualizarUsuario(${usuarioID}) falla: ${error.message} | campos: ${Object.keys(datos).join(', ')}`);
+    throw new Error(`No pude guardar en BD: ${error.message}`);
+  }
   return { changes: 1 };
 }
 

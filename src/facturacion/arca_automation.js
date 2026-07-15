@@ -61,6 +61,7 @@ async function obtenerPuntoVentaDisponible(cuit, certificado, clavePrivada) {
       CUIT: parseInt(cuit.replace(/\D/g, '')),
       cert: certificado,
       key: clavePrivada,
+      access_token: process.env.AFIPSDK_TOKEN,
       production: PRODUCCION,
     });
 
@@ -109,8 +110,8 @@ export async function configurarARCAAutomatico(usuarioId, cuit, clavePrivada) {
       punto_venta: puntoVenta,
       afipsdk_cert: cifrarDato(certificado),
       afipsdk_key: null,
-      afipsdk_entorno: 'homologacion',
-      afipsdk_status: 'autorizado',
+      entorno: 'homologacion',
+      delegacion_estado: 'activa',
       actualizado_en: Math.floor(Date.now() / 1000),
     });
 
