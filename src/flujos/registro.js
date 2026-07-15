@@ -53,63 +53,116 @@ export async function manejarRegistro(numeroDeTelefono, texto, usuarioAcceso) {
     }
   }
 
-  // Todo de una vez: parsear 6 líneas
+  // Todo de una vez: Groq identifica cada línea sin importar orden
   if (paso === PASOS.REG_TODO_JUNTO) {
     const lineas = texto.trim().split('\n').map(l => l.trim());
     if (lineas.length < 6) {
-      await enviarTexto(numeroDeTelefono, '❌ Necesito 6 datos (nombre, CUIT, email, domicilio, IVA, punto venta).');
+      await enviarTexto(numeroDeTelefono, '❌ Necesito 6 datos: nombre, CUIT, email, domicilio, IVA, punto venta.');
       return;
     }
 
-    const [nombre, cuitRaw, email, domicilio, ivaRaw, puntoRaw] = lineas;
+    // Groq clasifica cada línea
+    try {
+      const Groq = (await import('groq-sdk')).default;
+      const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-    // Validar CUIT
-    const cuit = cuitRaw.replace(/[-.\s]/g, '');
-    if (cuit.length !== 11 || isNaN(parseInt(cuit))) {
-      await enviarTexto(numeroDeTelefono, '❌ CUIT inválido. Debe tener 11 dígitos sin guiones.');
-      return;
+      const prompt = `Clasificar estas 6 líneas de datos de registro. NO IMPORTA el orden.
+Líneas:
+${lineas.map((l, i) => `${i+1}. "${l}"`).join('\n')}
+
+Identifica QUÉ es cada línea:
+- nombre: nombre completo o razón social
+- cuit: 11 dígitos (puede tener guiones/puntos)
+- email: dirección de email
+- domicilio: calle y número
+- iva: 1 (Monotributista) o 2 (Responsable Inscripto)
+- punto_venta: número de punto de venta
+
+Devuelve JSON mapeando línea a tipo:
+{
+  "nombre": "línea_numero",
+  "cuit": "línea_numero",
+  "email": "línea_numero",
+  "domicilio": "línea_numero",
+  "iva": "línea_numero",
+  "punto_venta": "línea_numero"
+}`;
+
+      const msg = await groq.messages.create({
+        model: 'mixtral-8x7b-32768',
+        max_tokens: 300,
+        messages: [{ role: 'user', content: prompt }],
+      });
+
+      const respuesta = msg.content[0].type === 'text' ? msg.content[0].text : '{}';
+      const jsonMatch = respuesta.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        await enviarTexto(numeroDeTelefono, '❌ No entendí los datos. Revisá el formato.');
+        return;
+      }
+
+      const mapeo = JSON.parse(jsonMatch[0]);
+      const datos = {};
+      for (const [campo, lineaStr] of Object.entries(mapeo)) {
+        const lineNum = parseInt(lineaStr) - 1;
+        if (lineNum >= 0 && lineNum < lineas.length) {
+          datos[campo] = lineas[lineNum];
+        }
+      }
+
+      // Validar y normalizar
+      const nombre = datos.nombre;
+      const cuit = (datos.cuit || '').replace(/[-.\s]/g, '');
+      const email = datos.email;
+      const domicilio = datos.domicilio;
+      const iva = parseInt(datos.iva);
+      const punto = parseInt(datos.punto_venta);
+
+      if (!nombre || nombre.length < 2) {
+        await enviarTexto(numeroDeTelefono, '❌ Nombre no reconocido.');
+        return;
+      }
+      if (cuit.length !== 11 || isNaN(parseInt(cuit))) {
+        await enviarTexto(numeroDeTelefono, '❌ CUIT no válido (debe ser 11 dígitos).');
+        return;
+      }
+      if (!EMAIL_RE.test(email)) {
+        await enviarTexto(numeroDeTelefono, `❌ Email no válido: "${email}".`);
+        return;
+      }
+      if (![1, 2].includes(iva)) {
+        await enviarTexto(numeroDeTelefono, '❌ IVA debe ser 1 o 2.');
+        return;
+      }
+      if (isNaN(punto) || punto < 1) {
+        await enviarTexto(numeroDeTelefono, '❌ Punto de venta no válido.');
+        return;
+      }
+
+      // Guardar en BD
+      const ahora = Math.floor(Date.now() / 1000);
+      await actualizarUsuario(usuario.id, {
+        nombre,
+        email,
+        cuit,
+        razon_social: nombre,
+        domicilio,
+        condicion_iva: iva === 1 ? 'Monotributista' : 'Responsable Inscripto',
+        punto_venta: punto,
+        activo: 1,
+        plan: 'trial',
+        estado_registro: 'trial',
+        fecha_vencimiento: ahora + SIETE_DIAS,
+      });
+
+      await limpiarConversacion(numeroDeTelefono);
+      await siguientePaso(numeroDeTelefono, PASOS.MENU_PRINCIPAL, {});
+      await enviarTexto(numeroDeTelefono, '✅ Registrado. Bienvenido! Escribí algo para ver el menú.');
+      await enviarLinkPago(numeroDeTelefono, { id: usuario.id, email, nombre, cuit }, true);
+    } catch (error) {
+      logger.error(`Groq clasificación falla: ${error.message}`);
+      await enviarTexto(numeroDeTelefono, '❌ Error procesando datos. Reintentá.');
     }
-
-    // Validar email
-    if (!EMAIL_RE.test(email)) {
-      await enviarTexto(numeroDeTelefono, '❌ Email inválido.');
-      return;
-    }
-
-    // Validar IVA (1 o 2)
-    const iva = parseInt(ivaRaw);
-    if (![1, 2].includes(iva)) {
-      await enviarTexto(numeroDeTelefono, '❌ IVA debe ser 1 (Monotributista) o 2 (Responsable Inscripto).');
-      return;
-    }
-
-    // Validar punto venta (número)
-    const punto = parseInt(puntoRaw);
-    if (isNaN(punto) || punto < 1) {
-      await enviarTexto(numeroDeTelefono, '❌ Punto de venta debe ser un número válido.');
-      return;
-    }
-
-    // Guardar todo en BD
-    const ahora = Math.floor(Date.now() / 1000);
-    await actualizarUsuario(usuario.id, {
-      nombre,
-      email,
-      cuit,
-      razon_social: nombre,
-      domicilio,
-      condicion_iva: iva === 1 ? 'Monotributista' : 'Responsable Inscripto',
-      punto_venta: punto,
-      activo: 1,
-      plan: 'trial',
-      estado_registro: 'trial',
-      fecha_vencimiento: ahora + SIETE_DIAS,
-    });
-
-    await limpiarConversacion(numeroDeTelefono);
-    await siguientePaso(numeroDeTelefono, PASOS.MENU_PRINCIPAL, {});
-    await enviarTexto(numeroDeTelefono, '✅ Cuenta configurada. Escribí algo para ver el menú.');
-    await enviarLinkPago(numeroDeTelefono, { id: usuario.id, email, nombre, cuit }, true);
     return;
   }
 
