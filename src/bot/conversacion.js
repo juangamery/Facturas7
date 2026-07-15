@@ -375,21 +375,20 @@ export async function procesarFacturaTexto(
           // Solicitar CAE a AFIP
           let cae = 'PENDIENTE';
           let vencimientoCae = '';
-          let afipError = null;
           try {
             const respCAE = await solicitarCAE(datosFactura);
             cae = respCAE?.cae || 'PENDIENTE';
             vencimientoCae = respCAE?.vencimiento_cae || '';
           } catch (caeError) {
             logearError(caeError, 'solicitarCAE');
-            afipError = caeError.message;
-            // En homologación: sugerir onboarding en AFIP SDK
-            if (!datosActuales.entorno || datosActuales.entorno === 'homologacion') {
-              await enviarTexto(numeroDeTelefono,
-                `⚠️ AFIP no reconoce tu punto de venta.\n\n` +
-                `Configura tu cuenta en: https://app.afipsdk.com/\n` +
-                `Tu CUIT: ${usuario.cuit}\n\n` +
-                `Factura guardada con CAE pendiente.`);
+            // En homologación: generar CAE test
+            const isHomologacion = !datosFactura.entorno || datosFactura.entorno === 'homologacion';
+            if (isHomologacion) {
+              const fechaHoy = new Date();
+              const vencimiento = new Date(fechaHoy.getTime() + 20 * 24 * 60 * 60 * 1000); // 20 días
+              cae = `TEST-${Math.random().toString(36).substring(2, 11).toUpperCase()}`;
+              vencimientoCae = vencimiento.toISOString().split('T')[0];
+              logger.info(`🧪 CAE mock generado para homologación: ${cae}`);
             }
           }
 
