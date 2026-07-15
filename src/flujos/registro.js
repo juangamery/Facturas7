@@ -29,10 +29,11 @@ export async function manejarRegistro(numeroDeTelefono, texto, usuarioAcceso) {
   const conv = await obtenerEstado(numeroDeTelefono);
   const paso = conv?.paso;
 
-  // Desconocido total: crear y preguntar método registro.
+  // Desconocido total: crear y pedir completar SETUP en ARCA primero
   if (!usuario) {
     usuario = await crearUsuario(numeroDeTelefono, {});
     await siguientePaso(numeroDeTelefono, PASOS.REG_METODO, {});
+    await enviarTexto(numeroDeTelefono, PLANTILLAS.PRE_SETUP_REQUERIDO);
     await enviarTexto(numeroDeTelefono, PLANTILLAS.METODO_REGISTRO);
     return;
   }

@@ -61,6 +61,22 @@ Si el problema persiste contactanos:
 📱 ${process.env.NUMERO_ADMIN || ''}`;
 
 // ==========================================
+// PRE-SETUP: CONFIGURACIÓN ARCA REQUERIDA
+// ==========================================
+
+const PRE_SETUP_REQUERIDO = `📋 ¡IMPORTANTE! Antes de registrarte necesitás completar 2 pasos en ARCA.
+
+Es muy simple (2 minutos):
+
+**Paso 1:** Delegá la facturación electrónica a Facturitas7 en ARCA
+**Paso 2:** Creá tu punto de venta para Web Services
+
+👉 Lee la guía completa aquí:
+https://github.com/juangamery/Facturas7/blob/main/SETUP_ARCA.md
+
+Una vez completado, volvé aquí y decime algo. ✅`;
+
+// ==========================================
 // FLUJO 1 — ONBOARDING
 // ==========================================
 
@@ -419,6 +435,9 @@ export {
   CANCELADO,
   TIMEOUT,
   ERROR_GENERAL,
+
+  // Pre-setup ARCA
+  PRE_SETUP_REQUERIDO,
 
   // Registro (usuario desconocido)
   pedir_nombre_registro,
