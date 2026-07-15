@@ -348,7 +348,12 @@ export async function procesarFacturaTexto(
             documento_cliente: datosActuales.documento_cliente || 'CF',
             concepto: datosActuales.concepto,
             importe: datosActuales.importe,
-            punto_venta: datosActuales.punto_venta || 1,
+            punto_venta: datosActuales.punto_venta || usuario.punto_venta || 1,
+            // Datos AFIP
+            cuit: usuario.cuit,
+            condicion_iva_cliente: 5, // 5=Consumidor Final (por defecto)
+            concepto_afip: 1, // 1=Productos
+            entorno: process.env.AFIPSDK_ENTORNO || 'homologacion',
           };
 
           // Generar PDF
