@@ -191,17 +191,26 @@ async function procesarTextoGenerico(numeroDeTelefono, texto, usuario) {
 
 async function procesarImagenGenerico(numeroDeTelefono, imagenID, usuario) {
   try {
-    // Verificar si Claude Vision está disponible
-    if (!process.env.ANTHROPIC_API_KEY) {
-      await enviarTexto(
-        numeroDeTelefono,
-        '📸 Por el momento no puedo interpretar imágenes. Por favor escribí los datos manualmente o mandá un audio.'
-      );
+    // Descargar imagen
+    const { descargarMediaDeTelefono } = await import('../whatsapp/media.js');
+    const imagenPath = await descargarMediaDeTelefono(imagenID);
+
+    if (!imagenPath) {
+      await enviarTexto(numeroDeTelefono, '❌ No pude descargar imagen');
       return;
     }
 
-    await procesarImagen(numeroDeTelefono, imagenID, usuario);
-    logger.info(`📸 Imagen recibida de ${numeroDeTelefono}`);
+    // Preferencia: Gemini Vision > Claude Vision
+    if (process.env.GOOGLE_API_KEY) {
+      const { procesarImagenFactura } = await import('../flujos/imagen_vision.js');
+      await procesarImagenFactura(numeroDeTelefono, imagenPath, usuario);
+    } else if (process.env.ANTHROPIC_API_KEY) {
+      await procesarImagen(numeroDeTelefono, imagenID, usuario);
+    } else {
+      await enviarTexto(numeroDeTelefono, '📸 No tengo visión de imágenes configurada. Escribí los datos manualmente.');
+    }
+
+    logger.info(`📸 Imagen procesada de ${numeroDeTelefono}`);
 
   } catch (error) {
     logearError(error, `Procesamiento imagen ${imagenID}`);

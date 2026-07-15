@@ -22,6 +22,7 @@
   "dependencies": {
     "@afipsdk/afip.js": "^1.2.3",
     "@anthropic-ai/sdk": "^0.28.0",
+    "@google/generative-ai": "^0.24.1",
     "@supabase/supabase-js": "^2.39.0",
     "axios": "^1.6.5",
     "bcrypt": "^5.1.1",
