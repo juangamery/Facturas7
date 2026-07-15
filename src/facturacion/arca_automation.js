@@ -36,9 +36,8 @@ async function generarCertificadoUsuario(cuit, clavePrivada) {
     // Autofirmar certificado (válido 365 días)
     execSync(`openssl x509 -req -days 365 -in ${csrPath} -signkey ${keyPath} -out ${certPath} 2>/dev/null`);
 
-    const fs = require('fs');
-    const certificado = fs.readFileSync(certPath, 'utf8');
-    const keyGenerada = fs.readFileSync(keyPath, 'utf8');
+    const certificado = readFileSync(certPath, 'utf8');
+    const keyGenerada = readFileSync(keyPath, 'utf8');
 
     // Limpiar temporales
     unlinkSync(keyPath);
