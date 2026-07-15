@@ -421,6 +421,16 @@ export async function procesarFacturaTexto(
             })
           );
 
+          // Enviar PDF
+          if (pdfPath) {
+            try {
+              const { enviarDocumento } = await import('../whatsapp/mensajes.js');
+              await enviarDocumento(numeroDeTelefono, pdfPath, `Factura_${datosFactura.numero_factura}.pdf`);
+            } catch (pdfSendError) {
+              logger.warn(`PDF no pudo enviarse: ${pdfSendError.message}`);
+            }
+          }
+
           await limpiarConversacion(numeroDeTelefono);
         } catch (error) {
           logearError(error, 'Emitir factura');
