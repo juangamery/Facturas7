@@ -58,7 +58,7 @@ export async function manejarRegistro(numeroDeTelefono, texto, usuarioAcceso) {
       return;
     }
 
-    const datosActuales = conversacion?.datos ? JSON.parse(conversacion.datos) : {};
+    const datosActuales = conv?.datos ? JSON.parse(conv.datos) : {};
     const cuit = datosActuales.cuit_setup || '';
 
     await enviarTexto(numeroDeTelefono, PLANTILLAS.PRE_SETUP_PROCESANDO);
