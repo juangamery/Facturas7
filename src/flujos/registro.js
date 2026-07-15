@@ -66,27 +66,46 @@ export async function manejarRegistro(numeroDeTelefono, texto, usuarioAcceso) {
     try {
       const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-      const prompt = `Clasificar estas 6 líneas de datos de registro. NO IMPORTA el orden.
-Líneas:
+      const prompt = `TAREA CRÍTICA: Clasificar 6 líneas de datos de registro. El orden NO IMPORTA.
+
+Líneas del usuario:
 ${lineas.map((l, i) => `${i+1}. "${l}"`).join('\n')}
 
-Identifica QUÉ es cada línea:
-- nombre: nombre completo o razón social
-- cuit: 11 dígitos (puede tener guiones/puntos)
-- email: dirección de email
-- domicilio: calle y número
-- iva: 1 (Monotributista) o 2 (Responsable Inscripto)
-- punto_venta: número de punto de venta
+IDENTIFICA EXACTAMENTE QUÉ ES CADA LÍNEA:
 
-Devuelve JSON mapeando línea a tipo:
+NOMBRE: nombre completo, razón social, empresa (NO números, NO emails, NO direcciones)
+  Ejemplo: "Carlos Federico", "Empresa XYZ"
+
+CUIT: 11 dígitos, puede tener guiones/puntos
+  Ejemplo: "20347351300", "20-34735130-0"
+
+EMAIL: contiene @ y punto
+  Ejemplo: "cf@gunther@gmail.com", "empresa@mail.com"
+
+DOMICILIO: calle, avenida, número, pero NO números solos ni emails
+  Ejemplo: "Jauretche 975", "Av. Corrientes 1234"
+
+IVA: solo 1 o 2
+  Ejemplo: "1" = Monotributista, "2" = Responsable
+
+PUNTO_VENTA: número pequeño (típicamente 1-999)
+  Ejemplo: "1", "5", "10"
+
+DEVUELVE SOLO JSON (sin markdown, sin comillas extras):
 {
-  "nombre": "línea_numero",
-  "cuit": "línea_numero",
-  "email": "línea_numero",
-  "domicilio": "línea_numero",
-  "iva": "línea_numero",
-  "punto_venta": "línea_numero"
-}`;
+  "nombre": "1",
+  "cuit": "2",
+  "email": "3",
+  "domicilio": "4",
+  "iva": "5",
+  "punto_venta": "6"
+}
+
+Reglas:
+- SIEMPRE devuelve JSON válido
+- Los valores son números de línea (1-6)
+- Si no encuentras un campo, omítelo
+- NO guesses: si no está seguro, omite`;
 
       const msg = await groq.messages.create({
         model: 'mixtral-8x7b-32768',
@@ -97,11 +116,19 @@ Devuelve JSON mapeando línea a tipo:
       const respuesta = msg.content[0].type === 'text' ? msg.content[0].text : '{}';
       const jsonMatch = respuesta.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
+        logger.warn(`Groq no retorna JSON: ${respuesta.substring(0, 200)}`);
         await enviarTexto(numeroDeTelefono, '❌ No entendí los datos. Revisá el formato.');
         return;
       }
 
-      const mapeo = JSON.parse(jsonMatch[0]);
+      let mapeo;
+      try {
+        mapeo = JSON.parse(jsonMatch[0]);
+      } catch (parseError) {
+        logger.error(`JSON inválido: ${jsonMatch[0]}`);
+        await enviarTexto(numeroDeTelefono, '❌ Error procesando datos. Reintentá.');
+        return;
+      }
       const datos = {};
       for (const [campo, lineaStr] of Object.entries(mapeo)) {
         const lineNum = parseInt(lineaStr) - 1;
@@ -155,9 +182,15 @@ Devuelve JSON mapeando línea a tipo:
         fecha_vencimiento: ahora + SIETE_DIAS,
       });
 
-      await limpiarConversacion(numeroDeTelefono);
-      await siguientePaso(numeroDeTelefono, PASOS.MENU_PRINCIPAL, {});
-      await enviarTexto(numeroDeTelefono, '✅ Registrado. Bienvenido! Escribí algo para ver el menú.');
+      // Post-registro → ONBOARDING (no MENU) para pedir clave fiscal + AFIPSDK
+      await siguientePaso(numeroDeTelefono, PASOS.ONBOARDING_CUIT, {
+        cuit,
+        razon_social: nombre,
+        domicilio,
+        condicion_iva: iva === 1 ? 'Monotributista' : 'Responsable Inscripto',
+        punto_venta: punto,
+      });
+      await enviarTexto(numeroDeTelefono, '✅ Registrado! Ahora completá onboarding. Escribí tu CUIT (ya lo tenemos, confirmá o corregí):');
       await enviarLinkPago(numeroDeTelefono, { id: usuario.id, email, nombre, cuit }, true);
     } catch (error) {
       logger.error(`Groq clasificación falla: ${error.message}`);
