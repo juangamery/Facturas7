@@ -392,7 +392,7 @@ export async function procesarFacturaTexto(
   usuario
 ) {
   try {
-    // Detectar si usuario mandó múltiples campos a la vez
+    // EN CUALQUIER PASO: intentar extraer TODOS los campos
     if (
       paso === PASOS.FACTURA_NOMBRE_CLIENTE ||
       paso === PASOS.FACTURA_DOCUMENTO_CLIENTE ||
@@ -400,40 +400,38 @@ export async function procesarFacturaTexto(
       paso === PASOS.FACTURA_IMPORTE
     ) {
       const extraccion = await groqExtraerFacturaCompleta(texto, datosActuales);
-      const nuevos = Object.keys(extraccion).length;
 
-      if (nuevos > 0) {
-        // Mapear campos extraídos a nombres del sistema
-        const mapeo = { nombre: 'razon_social_cliente', documento: 'documento_cliente', concepto: 'concepto', importe: 'importe' };
-        for (const [key, value] of Object.entries(extraccion)) {
-          const campoSistema = mapeo[key];
-          if (campoSistema && value) {
-            await guardarDato(numeroDeTelefono, campoSistema, value);
-            datosActuales[campoSistema] = value;
-          }
-        }
-
-        const faltantes = obtenerCamposFaltantes(datosActuales);
-        if (faltantes.length === 0) {
-          // Completo → confirmación
-          await siguientePaso(numeroDeTelefono, PASOS.FACTURA_CONFIRMACION, datosActuales);
-          await enviarTexto(
-            numeroDeTelefono,
-            PLANTILLAS.resumenFactura({
-              tipo_comprobante: 'Factura C',
-              ...datosActuales,
-            })
-          );
-          return;
-        } else {
-          // Faltan campos → saltar al primero faltante
-          const proximoPaso = PASOS[`FACTURA_${faltantes[0].toUpperCase()}`];
-          const pregunta = PLANTILLAS[`PEDIR_${faltantes[0].toUpperCase()}`];
-          await siguientePaso(numeroDeTelefono, proximoPaso, datosActuales);
-          await enviarTexto(numeroDeTelefono, pregunta);
-          return;
+      // Mapear campos extraídos a nombres del sistema
+      const mapeo = { nombre: 'razon_social_cliente', documento: 'documento_cliente', concepto: 'concepto', importe: 'importe' };
+      for (const [key, value] of Object.entries(extraccion)) {
+        const campoSistema = mapeo[key];
+        if (campoSistema && value) {
+          await guardarDato(numeroDeTelefono, campoSistema, value);
+          datosActuales[campoSistema] = value;
         }
       }
+
+      const faltantes = obtenerCamposFaltantes(datosActuales);
+      if (faltantes.length === 0) {
+        // TODOS completos → confirmación directo (skip preguntas restantes)
+        await siguientePaso(numeroDeTelefono, PASOS.FACTURA_CONFIRMACION, datosActuales);
+        await enviarTexto(
+          numeroDeTelefono,
+          PLANTILLAS.resumenFactura({
+            tipo_comprobante: 'Factura C',
+            ...datosActuales,
+          })
+        );
+        return;
+      } else if (Object.keys(extraccion).length > 0) {
+        // Parcial → rellenar lo que tiene, preguntar solo faltantes
+        const proximoPaso = PASOS[`FACTURA_${faltantes[0].toUpperCase()}`];
+        const pregunta = PLANTILLAS[`PEDIR_${faltantes[0].toUpperCase()}`];
+        await siguientePaso(numeroDeTelefono, proximoPaso, datosActuales);
+        await enviarTexto(numeroDeTelefono, pregunta);
+        return;
+      }
+      // Si no extrae nada, continúa con lógica normal de paso
     }
 
     if (paso === PASOS.FACTURA_NOMBRE_CLIENTE) {
