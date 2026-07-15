@@ -68,6 +68,7 @@ async function groqInterpretarCampo(campo, pregunta, respuestaUsuario) {
     const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
     const prompts = {
+      // Factura
       nombre_cliente: `Estoy rellenando una factura en WhatsApp.
 Usuario respondió "${respuestaUsuario}" a la pregunta: "${pregunta}"
 
@@ -103,6 +104,49 @@ Extrae monto numérico (sin $ ni letras).
   "valor": 1000,
   "valido": true/false,
   "duda": "pregunta si hay dudas (null si OK)"
+}`,
+
+      // Onboarding
+      cuit_onboarding: `Usuario respondió "${respuestaUsuario}" a: "${pregunta}"
+Extrae CUIT argentino (11 dígitos, puede tener guiones/puntos/espacios).
+{
+  "valor": "20347351300",
+  "valido": true/false,
+  "duda": "aclaración si no está claro (null si OK)"
+}`,
+
+      razon_social: `Usuario respondió "${respuestaUsuario}" a: "${pregunta}"
+Extrae nombre/razón social (normaliza mayúsculas, espacios).
+{
+  "valor": "Nombre Completo",
+  "valido": true/false,
+  "duda": null
+}`,
+
+      domicilio: `Usuario respondió "${respuestaUsuario}" a: "${pregunta}"
+Extrae domicilio (calle, número, piso, etc).
+{
+  "valor": "Calle 123",
+  "valido": true/false,
+  "duda": null
+}`,
+
+      condicion_iva_onboarding: `Usuario respondió "${respuestaUsuario}" a: "${pregunta}"
+Mapea a 1=Monotributista o 2=Responsable Inscripto.
+Si dice "1" o "monotributista", → 1.
+Si dice "2" o "responsable", → 2.
+{
+  "valor": 1,
+  "valido": true/false,
+  "duda": "aclaración (null si claro)"
+}`,
+
+      clave_fiscal: `Usuario respondió "${respuestaUsuario}" a: "${pregunta}"
+Valida que sea una clave fiscal AFIP válida (generalmente 8+ caracteres, alfanuméricos).
+{
+  "valor": "clavefiscal_aqui",
+  "valido": true/false,
+  "duda": null
 }`,
     };
 
@@ -294,72 +338,88 @@ export async function procesarOnboarding(
 ) {
   try {
     if (paso === PASOS.ONBOARDING_CUIT) {
-      // Validar CUIT
-      if (!validarCUIT(texto)) {
-        await enviarTexto(numeroDeTelefono, PLANTILLAS.CUIT_INVALIDO);
+      const interpretacion = await groqInterpretarCampo('cuit_onboarding', 'CUIT (11 dígitos sin guiones)', texto);
+      if (!interpretacion.valido) {
+        await enviarTexto(numeroDeTelefono, interpretacion.duda || PLANTILLAS.CUIT_INVALIDO);
         return;
       }
-      await guardarDato(numeroDeTelefono, 'cuit', texto);
+      if (interpretacion.duda) {
+        await enviarTexto(numeroDeTelefono, interpretacion.duda);
+        return;
+      }
+      await guardarDato(numeroDeTelefono, 'cuit', interpretacion.valor);
       await siguientePaso(numeroDeTelefono, PASOS.ONBOARDING_RAZON_SOCIAL);
-      await enviarTexto(numeroDeTelefono, PLANTILLAS.CUIT_VALIDO);
+      await enviarTexto(numeroDeTelefono, PLANTILLAS.PEDIR_RAZON_SOCIAL);
     } else if (paso === PASOS.ONBOARDING_RAZON_SOCIAL) {
-      await guardarDato(numeroDeTelefono, 'razon_social', texto);
+      const interpretacion = await groqInterpretarCampo('razon_social', 'Nombre o razón social', texto);
+      if (!interpretacion.valido) {
+        await enviarTexto(numeroDeTelefono, interpretacion.duda || PLANTILLAS.PEDIR_RAZON_SOCIAL);
+        return;
+      }
+      if (interpretacion.duda) {
+        await enviarTexto(numeroDeTelefono, interpretacion.duda);
+        return;
+      }
+      await guardarDato(numeroDeTelefono, 'razon_social', interpretacion.valor);
       await siguientePaso(numeroDeTelefono, PASOS.ONBOARDING_DOMICILIO);
       await enviarTexto(numeroDeTelefono, PLANTILLAS.PEDIR_DOMICILIO);
     } else if (paso === PASOS.ONBOARDING_DOMICILIO) {
-      await guardarDato(numeroDeTelefono, 'domicilio', texto);
+      const interpretacion = await groqInterpretarCampo('domicilio', 'Domicilio fiscal (calle y número)', texto);
+      if (!interpretacion.valido) {
+        await enviarTexto(numeroDeTelefono, interpretacion.duda || PLANTILLAS.PEDIR_DOMICILIO);
+        return;
+      }
+      if (interpretacion.duda) {
+        await enviarTexto(numeroDeTelefono, interpretacion.duda);
+        return;
+      }
+      await guardarDato(numeroDeTelefono, 'domicilio', interpretacion.valor);
       await siguientePaso(numeroDeTelefono, PASOS.ONBOARDING_CONDICION_IVA);
       await enviarTexto(numeroDeTelefono, PLANTILLAS.PEDIR_CONDICION_IVA);
     } else if (paso === PASOS.ONBOARDING_CONDICION_IVA) {
-      // Validar opción
-      if (!['1', '2'].includes(texto.trim())) {
-        await enviarTexto(
-          numeroDeTelefono,
-          PLANTILLAS.CONDICION_IVA_INVALIDA
-        );
+      const interpretacion = await groqInterpretarCampo('condicion_iva_onboarding', '1=Monotributista o 2=Responsable Inscripto', texto);
+      if (!interpretacion.valido) {
+        await enviarTexto(numeroDeTelefono, interpretacion.duda || PLANTILLAS.CONDICION_IVA_INVALIDA);
         return;
       }
-      const condicion = texto.trim() === '1' ? 'Monotributista' : 'Responsable Inscripto';
+      if (interpretacion.duda) {
+        await enviarTexto(numeroDeTelefono, interpretacion.duda);
+        return;
+      }
+      const condicion = interpretacion.valor === 1 || interpretacion.valor === '1' ? 'Monotributista' : 'Responsable Inscripto';
       await guardarDato(numeroDeTelefono, 'condicion_iva', condicion);
       await siguientePaso(numeroDeTelefono, PASOS.ONBOARDING_PUNTO_VENTA);
       await enviarTexto(numeroDeTelefono, PLANTILLAS.PEDIR_PUNTO_VENTA);
     } else if (paso === PASOS.ONBOARDING_PUNTO_VENTA) {
-      // Usuario dice NO → mostrar instrucciones
       if (esConfirmacionNO(texto)) {
-        await enviarTexto(
-          numeroDeTelefono,
-          PLANTILLAS.INSTRUCCIONES_PUNTO_VENTA
-        );
+        await enviarTexto(numeroDeTelefono, PLANTILLAS.INSTRUCCIONES_PUNTO_VENTA);
         return;
       }
-      // Validar que sea número
-      if (isNaN(parseInt(texto))) {
-        await enviarTexto(numeroDeTelefono, PLANTILLAS.PEDIR_PUNTO_VENTA);
+      const interpretacion = await groqInterpretarCampo('importe', 'Punto de venta (número)', texto);
+      if (!interpretacion.valido) {
+        await enviarTexto(numeroDeTelefono, interpretacion.duda || PLANTILLAS.PEDIR_PUNTO_VENTA);
         return;
       }
-      await guardarDato(numeroDeTelefono, 'punto_venta', texto);
-      await siguientePaso(
-        numeroDeTelefono,
-        PASOS.ONBOARDING_CLAVE_FISCAL,
-        datosActuales
-      );
+      if (interpretacion.duda) {
+        await enviarTexto(numeroDeTelefono, interpretacion.duda);
+        return;
+      }
+      await guardarDato(numeroDeTelefono, 'punto_venta', interpretacion.valor);
+      await siguientePaso(numeroDeTelefono, PASOS.ONBOARDING_CLAVE_FISCAL, datosActuales);
       await enviarTexto(numeroDeTelefono, '🔐 Ahora necesitamos tu clave fiscal de AFIP para autorizar facturas. Escribila (será cifrada y segura).');
     } else if (paso === PASOS.ONBOARDING_CLAVE_FISCAL) {
-      if (!texto || texto.length < 3) {
-        await enviarTexto(numeroDeTelefono, '⚠️ Clave fiscal muy corta. Revisá e intentá de nuevo.');
+      const interpretacion = await groqInterpretarCampo('clave_fiscal', 'Clave fiscal AFIP', texto);
+      if (!interpretacion.valido) {
+        await enviarTexto(numeroDeTelefono, interpretacion.duda || '⚠️ Clave fiscal no válida. Revisá e intentá de nuevo.');
         return;
       }
-      await guardarDato(numeroDeTelefono, 'clave_fiscal_temp', texto);
-      await siguientePaso(
-        numeroDeTelefono,
-        PASOS.ONBOARDING_CONFIRMACION,
-        datosActuales
-      );
-      // Mostrar resumen para confirmar
-      await enviarTexto(
-        numeroDeTelefono,
-        PLANTILLAS.onboardingCompleto(datosActuales)
-      );
+      if (interpretacion.duda) {
+        await enviarTexto(numeroDeTelefono, interpretacion.duda);
+        return;
+      }
+      await guardarDato(numeroDeTelefono, 'clave_fiscal_temp', interpretacion.valor);
+      await siguientePaso(numeroDeTelefono, PASOS.ONBOARDING_CONFIRMACION, datosActuales);
+      await enviarTexto(numeroDeTelefono, PLANTILLAS.onboardingCompleto(datosActuales));
     } else if (paso === PASOS.ONBOARDING_CONFIRMACION) {
       if (esConfirmacionSI(texto)) {
         await enviarTexto(numeroDeTelefono, '⏳ Registrando en AFIPSDK...');

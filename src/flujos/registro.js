@@ -19,7 +19,7 @@ import { crearSuscripcion } from '../mercadopago/suscripcion.js';
 import { logger } from '../logger.js';
 
 const SIETE_DIAS = 7 * 24 * 60 * 60;
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EMAIL_RE = /^[a-zA-Z0-9._%-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 
 // Punto de entrada. Se llama cuando el acceso fue denegado
 // (desconocido, inactivo o vencido).
