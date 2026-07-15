@@ -142,11 +142,12 @@ async function crearPuntoVenta(cuit, certificado, clavePrivada, produccion = fal
 }
 
 // FLUJO COMPLETO: Registro usuario en AFIPSDK
+// Clave fiscal se usa UNA VEZ y se descarta completamente
 export async function registrarUsuarioAFIPSDK(usuarioId, cuit, clavePrivada, razonSocial) {
   try {
     logger.info(`📝 Iniciando registro AFIPSDK para ${cuit}...`);
 
-    // 1. Generar certificado
+    // 1. Generar certificado (basado en clave fiscal)
     const { certificado, clavePrivada: keyGenerada } = await generarCertificado(cuit, clavePrivada);
 
     // 2. Autorizar WS (homologación primero)
@@ -155,22 +156,22 @@ export async function registrarUsuarioAFIPSDK(usuarioId, cuit, clavePrivada, raz
     // 3. Crear punto de venta
     const pvInfo = await crearPuntoVenta(cuit, certificado, keyGenerada, false);
 
-    // 4. Guardar en BD (credenciales cifradas)
+    // 4. Guardar en BD SOLO certificado + punto_venta
+    // NO guardamos clavePrivada ni clavePrivada del usuario (se descarta)
     const certCifrado = cifrarDato(certificado);
-    const keyCifrado = cifrarDato(keyGenerada);
 
     await actualizarUsuario(usuarioId, {
       cuit,
       razon_social: razonSocial,
       punto_venta: pvInfo.punto_venta,
       afipsdk_cert: certCifrado,
-      afipsdk_key: keyCifrado,
+      afipsdk_key: null, // NO guardamos clave privada
       afipsdk_entorno: 'homologacion',
       afipsdk_status: 'autorizado',
       actualizado_en: Math.floor(Date.now() / 1000),
     });
 
-    logger.info(`✅ Usuario ${usuarioId} registrado en AFIPSDK`);
+    logger.info(`✅ Usuario ${usuarioId} registrado en AFIPSDK (clave fiscal descartada)`);
 
     return {
       exito: true,

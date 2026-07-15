@@ -425,7 +425,7 @@ export async function procesarOnboarding(
       }
       await guardarDato(numeroDeTelefono, 'punto_venta', interpretacion.valor);
       await siguientePaso(numeroDeTelefono, PASOS.ONBOARDING_CLAVE_FISCAL, datosActuales);
-      await enviarTexto(numeroDeTelefono, '🔐 Ahora necesitamos tu clave fiscal de AFIP para autorizar facturas. Escribila (será cifrada y segura).');
+      await enviarTexto(numeroDeTelefono, `🔐 Tu clave fiscal AFIP se usa UNA SOLA VEZ para configurar tu cuenta.\n\n✅ La usaremos en este momento y la descartaremos completamente.\n✅ Nunca la almacenamos ni la vemos.\n\nEscribila:`);
     } else if (paso === PASOS.ONBOARDING_CLAVE_FISCAL) {
       const interpretacion = await groqInterpretarCampo('clave_fiscal', 'Clave fiscal AFIP', texto);
       if (!interpretacion.valido) {
@@ -453,20 +453,19 @@ export async function procesarOnboarding(
           punto_venta: datosActuales.punto_venta,
         });
 
-        // Registrar en AFIPSDK automáticamente
+        // Registrar en AFIPSDK automáticamente (con clave fiscal)
         try {
           const { registrarUsuarioAFIPSDK } = await import('../facturacion/afipsdk_registro.js');
           const resultado = await registrarUsuarioAFIPSDK(
             usuario.id,
             datosActuales.cuit,
-            datosActuales.clave_fiscal_temp,
+            datosActuales.clave_fiscal_temp, // Usar clave temporal UNA SOLA VEZ
             datosActuales.razon_social
           );
 
           if (resultado.exito) {
-            await enviarTexto(numeroDeTelefono, resultado.mensaje);
+            await enviarTexto(numeroDeTelefono, `${resultado.mensaje}\n\n🔐 Tu clave fiscal se descartó completamente.`);
           } else {
-            // Si AFIPSDK falla, permitir continuar (puede registrarse después manualmente)
             await enviarTexto(
               numeroDeTelefono,
               `⚠️ ${resultado.mensaje}\n\nPuedes intentar registrarte manualmente en https://www.afip.gob.ar`
@@ -480,6 +479,7 @@ export async function procesarOnboarding(
           );
         }
 
+        // Limpiar conversación (incluyendo clave temporal)
         await limpiarConversacion(numeroDeTelefono);
         await siguientePaso(numeroDeTelefono, PASOS.MENU_PRINCIPAL);
         await enviarTexto(
