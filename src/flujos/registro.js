@@ -161,13 +161,13 @@ Reglas:
 - Si no encuentras un campo, omítelo
 - NO guesses: si no está seguro, omite`;
 
-      const msg = await groq.messages.create({
-        model: 'mixtral-8x7b-32768',
+      const msg = await groq.chat.completions.create({
+        model: 'llama-3.3-70b-versatile',
         max_tokens: 300,
         messages: [{ role: 'user', content: prompt }],
       });
 
-      const respuesta = msg.content[0].type === 'text' ? msg.content[0].text : '{}';
+      const respuesta = msg.choices[0]?.message?.content || '{}';
       const jsonMatch = respuesta.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
         logger.warn(`Groq no retorna JSON: ${respuesta.substring(0, 200)}`);

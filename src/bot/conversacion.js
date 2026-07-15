@@ -156,13 +156,13 @@ Valida que sea una clave fiscal AFIP válida (generalmente 8+ caracteres, alfanu
 
     const prompt = prompts[campo] || `Usuario: "${respuestaUsuario}". Interpreta este campo: ${campo}. Devuelve JSON con "valor", "valido", "duda".`;
 
-    const msg = await groq.messages.create({
-      model: 'mixtral-8x7b-32768',
+    const msg = await groq.chat.completions.create({
+      model: 'llama-3.3-70b-versatile',
       max_tokens: 200,
       messages: [{ role: 'user', content: prompt }],
     });
 
-    const respuesta = msg.content[0].type === 'text' ? msg.content[0].text : '{}';
+    const respuesta = msg.choices[0]?.message?.content || '{}';
     const jsonMatch = respuesta.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return { valor: respuestaUsuario, valido: false, duda: 'No entendí' };
 
@@ -210,13 +210,13 @@ Responde SOLO con JSON (sin markdown, sin comillas extras):
 
 Omite campos que NO tengas. Si no extraes nada, devuelve {}.`;
 
-    const msg = await groq.messages.create({
-      model: 'mixtral-8x7b-32768',
+    const msg = await groq.chat.completions.create({
+      model: 'llama-3.3-70b-versatile',
       max_tokens: 300,
       messages: [{ role: 'user', content: prompt }],
     });
 
-    const respuesta = msg.content[0].type === 'text' ? msg.content[0].text : '{}';
+    const respuesta = msg.choices[0]?.message?.content || '{}';
     const jsonMatch = respuesta.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       logger.warn(`Groq no extrae JSON: ${respuesta.substring(0, 100)}`);
