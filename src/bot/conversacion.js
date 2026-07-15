@@ -513,36 +513,50 @@ export async function procesarAudioConversacional(
     // Enviar mensaje "procesando"
     await enviarTexto(numeroDeTelefono, PLANTILLAS.AUDIO_RECIBIDO);
 
-    // Transcribir audio con Groq
-    let transcripcion = '';
-    if (process.env.GROQ_API_KEY) {
-      try {
-        const Groq = (await import('groq-sdk')).default;
-        const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-
-        const fs = (await import('fs')).default;
-        const audioBuffer = fs.readFileSync(audioPath);
-
-        const response = await groq.audio.transcriptions.create({
-          file: new File([audioBuffer], 'audio.wav', { type: 'audio/wav' }),
-          model: 'whisper-large-v3-turbo',
-          language: 'es',
-        });
-
-        transcripcion = response.text || '';
-        logger.info(`[AUDIO] Transcrito: ${transcripcion.substring(0, 100)}`);
-      } catch (groqError) {
-        logger.warn(`[GROQ] Transcripción falla: ${groqError.message}`);
-        await enviarTexto(numeroDeTelefono, PLANTILLAS.ERROR_AUDIO);
-        return;
-      }
-    } else {
+    // Validar Groq configurado
+    if (!process.env.GROQ_API_KEY) {
+      logger.warn('GROQ_API_KEY no configurada');
       await enviarTexto(numeroDeTelefono, PLANTILLAS.ERROR_AUDIO);
       return;
     }
 
+    // Transcribir audio con Groq Whisper
+    let transcripcion = '';
+    try {
+      const Groq = (await import('groq-sdk')).default;
+      const groq = new Groq({
+        apiKey: process.env.GROQ_API_KEY,
+        defaultHeaders: { 'user-agent': 'Facturas7-Bot/1.0' }
+      });
+
+      const fs = (await import('fs')).default;
+
+      // Leer archivo y crear FormData para Groq
+      const audioBuffer = fs.readFileSync(audioPath);
+      const file = new File([audioBuffer], 'audio.ogg', { type: 'audio/ogg' });
+
+      logger.info(`📝 Enviando audio a Groq (${audioPath})`);
+      const response = await groq.audio.transcriptions.create({
+        file: file,
+        model: 'whisper-large-v3-turbo',
+        language: 'es',
+        temperature: 0.0,
+      });
+
+      transcripcion = response.text || '';
+      if (!transcripcion) {
+        throw new Error('Groq retornó transcripción vacía');
+      }
+
+      logger.info(`✅ [AUDIO] Transcrito: ${transcripcion.substring(0, 100)}`);
+    } catch (groqError) {
+      logger.error(`❌ [GROQ] Transcripción falla: ${groqError.message}`);
+      await enviarTexto(numeroDeTelefono, `❌ Error transcribiendo: ${groqError.message}`);
+      return;
+    }
+
     // Procesar texto transcrito como flujo normal
-    if (!transcripcion) {
+    if (!transcripcion || transcripcion.length < 2) {
       await enviarTexto(numeroDeTelefono, PLANTILLAS.ERROR_AUDIO);
       return;
     }
