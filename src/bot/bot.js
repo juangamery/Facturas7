@@ -176,7 +176,7 @@ async function procesarTextoGenerico(numeroDeTelefono, texto, usuario) {
       paso === PASOS.FACTURA_IMPORTE ||
       paso === PASOS.FACTURA_CONFIRMACION
     ) {
-      await procesarFacturaTexto(numeroDeTelefono, texto, paso, datosActuales);
+      await procesarFacturaTexto(numeroDeTelefono, texto, paso, datosActuales, usuario);
       return;
     }
 

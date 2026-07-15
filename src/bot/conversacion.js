@@ -272,7 +272,8 @@ export async function procesarFacturaTexto(
   numeroDeTelefono,
   texto,
   paso,
-  datosActuales
+  datosActuales,
+  usuario
 ) {
   try {
     if (paso === PASOS.FACTURA_NOMBRE_CLIENTE) {
