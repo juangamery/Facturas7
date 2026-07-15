@@ -64,33 +64,38 @@ Si el problema persiste contactanos:
 // PRE-SETUP: CONFIGURACIÓN ARCA REQUERIDA
 // ==========================================
 
-const PRE_SETUP_REQUERIDO = `📋 ¡IMPORTANTE! Necesitás configurar ARCA antes de registrarte.
+const PRE_SETUP_REQUERIDO = `🚀 ¡Bienvenido a Facturas7!
 
-Tenés 2 opciones:
+Voy a configurar automáticamente tu cuenta en ARCA. Toma 1 minuto.
 
-1️⃣ **Manual** - Vos hacés los pasos en ARCA (2 min)
-2️⃣ **Automático** - Yo lo hago por vos (solo necesito tu clave fiscal)
+Necesito:
+1️⃣ Tu CUIT
+2️⃣ Tu clave fiscal AFIP
 
-¿Cuál prefieres? Respondé con 1 o 2.`;
+⚠️ Tu clave se usa UNA SOLA VEZ y se descarta completamente.
 
-const PRE_SETUP_MANUAL = `✅ Perfecto. Seguí estos pasos:
+¿Cuál es tu CUIT? (Ejemplo: 20-34735130-0)`;
 
-📋 **Paso 1:** Delegá facturación electrónica en ARCA
-📋 **Paso 2:** Creá tu punto de venta para Web Services
+const PRE_SETUP_CUIT_RECIBIDO = `✅ CUIT recibido.
 
-👉 Guía completa:
-https://github.com/juangamery/Facturas7/blob/main/SETUP_ARCA.md
+Ahora tu clave fiscal (se descarta inmediatamente después de usarla).`;
 
-Una vez completado, volvé aquí y decime algo. Continuaremos con tu registro. ✅`;
+const PRE_SETUP_PROCESANDO = `⏳ Configurando ARCA...
 
-const PRE_SETUP_AUTOMATICO = `🤖 Yo me encargo. Solo necesito tu clave fiscal de AFIP.
+🔄 Accediendo a ARCA...
+🔄 Delegando facturación electrónica...
+🔄 Creando punto de venta...
+🔄 Finalizando...`;
 
-⚠️ La usaré UNA SOLA VEZ para:
-✅ Delegar facturación electrónica
-✅ Crear tu punto de venta
-✅ Luego la descarto completamente (nunca la guardamos)
+const PRE_SETUP_EXITO = `✅ ¡Cuenta configurada!
 
-¿Compartís tu clave fiscal?`;
+Ya estás listo para emitir facturas. Tu clave fiscal se descartó completamente.
+
+Ahora completamos tu registro con los datos finales.`;
+
+const PRE_SETUP_ERROR = `❌ Error configurando ARCA.
+
+Verificá tu CUIT y clave fiscal, o intentá de nuevo en unos minutos.`;
 
 // ==========================================
 // FLUJO 1 — ONBOARDING
@@ -452,10 +457,12 @@ export {
   TIMEOUT,
   ERROR_GENERAL,
 
-  // Pre-setup ARCA
+  // Pre-setup ARCA automático
   PRE_SETUP_REQUERIDO,
-  PRE_SETUP_MANUAL,
-  PRE_SETUP_AUTOMATICO,
+  PRE_SETUP_CUIT_RECIBIDO,
+  PRE_SETUP_PROCESANDO,
+  PRE_SETUP_EXITO,
+  PRE_SETUP_ERROR,
 
   // Registro (usuario desconocido)
   pedir_nombre_registro,

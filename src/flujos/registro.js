@@ -29,53 +29,65 @@ export async function manejarRegistro(numeroDeTelefono, texto, usuarioAcceso) {
   const conv = await obtenerEstado(numeroDeTelefono);
   const paso = conv?.paso;
 
-  // Desconocido total: crear y ofrecer manual o automático para SETUP ARCA
+  // Desconocido total: pedir CUIT para setup automático
   if (!usuario) {
     usuario = await crearUsuario(numeroDeTelefono, {});
-    await siguientePaso(numeroDeTelefono, PASOS.PRE_SETUP_METODO, {});
+    await siguientePaso(numeroDeTelefono, PASOS.PRE_SETUP_CUIT, {});
     await enviarTexto(numeroDeTelefono, PLANTILLAS.PRE_SETUP_REQUERIDO);
     return;
   }
 
-  // Usuario elige setup: manual (1) o automático (2)
-  if (paso === PASOS.PRE_SETUP_METODO) {
-    const opcion = texto.trim();
-    if (opcion === '1') {
-      // Manual: usuario hace pasos en ARCA
-      await enviarTexto(numeroDeTelefono, PLANTILLAS.PRE_SETUP_MANUAL);
-      await siguientePaso(numeroDeTelefono, PASOS.REG_METODO, {});
-      return;
-    } else if (opcion === '2') {
-      // Automático: bot intenta con clave fiscal
-      await siguientePaso(numeroDeTelefono, PASOS.PRE_SETUP_AUTOMATICO, {});
-      await enviarTexto(numeroDeTelefono, PLANTILLAS.PRE_SETUP_AUTOMATICO);
-      return;
-    } else {
-      await enviarTexto(numeroDeTelefono, '❌ Respondé con 1 (manual) o 2 (automático).');
+  // Paso 1: Capturar CUIT del usuario
+  if (paso === PASOS.PRE_SETUP_CUIT) {
+    const cuit = texto.trim().replace(/[-.\s]/g, '');
+    if (cuit.length !== 11 || isNaN(parseInt(cuit))) {
+      await enviarTexto(numeroDeTelefono, '❌ CUIT inválido. Debe tener 11 dígitos. Ej: 20-34735130-0');
       return;
     }
+    await guardarDato(numeroDeTelefono, 'cuit_setup', cuit);
+    await siguientePaso(numeroDeTelefono, PASOS.PRE_SETUP_CLAVE, { cuit_setup: cuit });
+    await enviarTexto(numeroDeTelefono, PLANTILLAS.PRE_SETUP_CUIT_RECIBIDO);
+    return;
   }
 
-  // Usuario elige automático: pide clave fiscal, intenta automation
-  if (paso === PASOS.PRE_SETUP_AUTOMATICO) {
+  // Paso 2: Capturar clave fiscal y hacer automation ARCA
+  if (paso === PASOS.PRE_SETUP_CLAVE) {
     const claveFiscal = texto.trim();
     if (claveFiscal.length < 6) {
       await enviarTexto(numeroDeTelefono, '⚠️ Clave fiscal muy corta. Intentá de nuevo.');
       return;
     }
 
-    // Guardar clave temporalmente para usar en AFIPSDK
-    await guardarDato(numeroDeTelefono, 'clave_fiscal_pre_setup', claveFiscal);
+    const datosActuales = conversacion?.datos ? JSON.parse(conversacion.datos) : {};
+    const cuit = datosActuales.cuit_setup || '';
 
-    // TODO: Aquí iría automation con Puppeteer (por ahora solo guardamos)
-    // Por ahora continuamos con registro normal
-    await enviarTexto(numeroDeTelefono, '⏳ Configurando tu cuenta automáticamente...');
-    await enviarTexto(numeroDeTelefono, '✅ Listo. Ahora necesito tus datos para el registro.');
+    await enviarTexto(numeroDeTelefono, PLANTILLAS.PRE_SETUP_PROCESANDO);
 
-    await siguientePaso(numeroDeTelefono, PASOS.REG_METODO, {
-      clave_fiscal_pre_setup: claveFiscal
-    });
-    await enviarTexto(numeroDeTelefono, PLANTILLAS.METODO_REGISTRO);
+    // Hacer automation ARCA
+    try {
+      const { configurarARCAAutomatico } = await import('../facturacion/arca_automation.js');
+      const resultado = await configurarARCAAutomatico(cuit, claveFiscal);
+
+      if (resultado.exito) {
+        await enviarTexto(numeroDeTelefono, PLANTILLAS.PRE_SETUP_EXITO);
+
+        // Guardar punto de venta obtenido
+        await guardarDato(numeroDeTelefono, 'punto_venta_arca', resultado.punto_venta);
+
+        // Continuar con registro normal
+        await siguientePaso(numeroDeTelefono, PASOS.REG_METODO, {
+          cuit: cuit,
+          punto_venta: resultado.punto_venta,
+          arca_configurado: true
+        });
+        await enviarTexto(numeroDeTelefono, PLANTILLAS.METODO_REGISTRO);
+      } else {
+        await enviarTexto(numeroDeTelefono, `${PLANTILLAS.PRE_SETUP_ERROR}\n\nDetalles: ${resultado.error}`);
+      }
+    } catch (error) {
+      logger.error(`ARCA automation falla: ${error.message}`);
+      await enviarTexto(numeroDeTelefono, PLANTILLAS.PRE_SETUP_ERROR);
+    }
     return;
   }
 
