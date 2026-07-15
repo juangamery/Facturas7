@@ -10,7 +10,7 @@
 import Afip from '@afipsdk/afip.js';
 import { logger, logearError } from '../logger.js';
 import { execSync } from 'child_process';
-import { writeFileSync, unlinkSync } from 'fs';
+import { readFileSync, unlinkSync } from 'fs';
 import { join } from 'path';
 
 const TEMP_DIR = '/tmp/arca_setup';
