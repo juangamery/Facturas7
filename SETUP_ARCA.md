@@ -1,6 +1,6 @@
 # ✅ Configuración en ARCA (2 minutos)
 
-Antes de usar Facturitas7, necesitas configurar tu cuenta en ARCA. Es simple y rápido.
+Antes de usar Facturas7, necesitas configurar tu cuenta en ARCA. Es simple y rápido.
 
 ---
 
@@ -13,10 +13,10 @@ Antes de usar Facturitas7, necesitas configurar tu cuenta en ARCA. Es simple y r
    - **Organismo:** AFIP / ARCA
    - **Servicio:** Web Services
    - **Aplicación:** Facturación Electrónica
-5. En **Representante**, buscá el CUIT **20-41614242-68** (Facturitas7)
+5. En **Representante**, buscá el CUIT **20-34735130-0** (Facturas7)
 6. Hacé clic en **"Buscar"** y luego **"Confirmar"** dos veces
 
-✅ **¡Listo!** Facturitas7 ya puede emitir en tu nombre.
+✅ **¡Listo!** Facturas7 ya puede emitir en tu nombre.
 
 ---
 
@@ -35,7 +35,7 @@ Antes de usar Facturitas7, necesitas configurar tu cuenta en ARCA. Es simple y r
 
 ---
 
-## 📋 Datos que necesitás para Facturitas7
+## 📋 Datos que necesitás para Facturas7
 
 Anotá estos datos:
 
@@ -48,7 +48,7 @@ Anotá estos datos:
 
 ---
 
-## 🚀 Listo para usar Facturitas7
+## 🚀 Listo para usar Facturas7
 
 Cuando completes estos pasos, escribí algo en WhatsApp y seguí el registro.
 
