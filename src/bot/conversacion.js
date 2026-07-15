@@ -19,6 +19,7 @@ import { enviarTexto } from '../whatsapp/mensajes.js';
 import { validarCUIT } from '../facturacion/validaciones.js';
 import { generarPDFFactura } from '../facturacion/pdf.js';
 import { solicitarCAE } from '../facturacion/factura.js';
+import Groq from 'groq-sdk';
 
 // ==========================================
 // PASOS / ESTADOS DE LA CONVERSACIÓN
@@ -56,6 +57,118 @@ export const PASOS = {
   // Ver mis datos
   VER_MIS_DATOS: 'ver_mis_datos',
 };
+
+// ==========================================
+// GROQ - Interpretación Inteligente
+// ==========================================
+
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+
+async function groqInterpretarCampo(campo, pregunta, respuestaUsuario) {
+  try {
+    const prompts = {
+      nombre_cliente: `Estoy rellenando una factura en WhatsApp.
+Usuario respondió "${respuestaUsuario}" a la pregunta: "${pregunta}"
+
+Extrae el nombre del cliente. Devuelve JSON:
+{
+  "valor": "nombre_aqui",
+  "valido": true/false,
+  "duda": "pregunta si necesitas aclarar algo (null si está claro)"
+}
+
+Sé inteligente: normaliza espacios, mayúsculas. Si es ambiguo o está incompleto, marca duda.`,
+
+      documento_cliente: `Usuario respondió "${respuestaUsuario}" a: "${pregunta}"
+Extrae documento (CUIT 11 dígitos, DNI 7-8 dígitos, o "CF" para consumidor final).
+Devuelve JSON:
+{
+  "valor": "CF o documento_aqui",
+  "valido": true/false,
+  "duda": "pregunta si necesitas aclarar (null si OK)"
+}`,
+
+      concepto: `Usuario respondió "${respuestaUsuario}" a: "${pregunta}"
+Extrae concepto/descripción. Normaliza.
+{
+  "valor": "concepto_aqui",
+  "valido": true/false,
+  "duda": null
+}`,
+
+      importe: `Usuario respondió "${respuestaUsuario}" a: "${pregunta}"
+Extrae monto numérico (sin $ ni letras).
+{
+  "valor": 1000,
+  "valido": true/false,
+  "duda": "pregunta si hay dudas (null si OK)"
+}`,
+    };
+
+    const prompt = prompts[campo] || `Usuario: "${respuestaUsuario}". Interpreta este campo: ${campo}. Devuelve JSON con "valor", "valido", "duda".`;
+
+    const msg = await groq.messages.create({
+      model: 'mixtral-8x7b-32768',
+      max_tokens: 200,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    const respuesta = msg.content[0].type === 'text' ? msg.content[0].text : '{}';
+    const jsonMatch = respuesta.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return { valor: respuestaUsuario, valido: false, duda: 'No entendí' };
+
+    return JSON.parse(jsonMatch[0]);
+  } catch (error) {
+    logger.warn(`Groq interpret falla (${campo}): ${error.message}. Fallback literal.`);
+    return { valor: respuestaUsuario, valido: true, duda: null };
+  }
+}
+
+async function groqExtraerFacturaCompleta(transcripcion, datosActuales) {
+  try {
+    const prompt = `Usuario dijo por audio: "${transcripcion}"
+
+Estamos rellenando una factura. Extrae TODOS los campos que mencione:
+- nombre_cliente (nombre de la persona)
+- documento (CUIT, DNI, o CF)
+- concepto (qué es la factura)
+- importe (monto numérico)
+
+Devuelve JSON con los campos que encuentres (omitir si no están):
+{
+  "nombre": "Nombre si está",
+  "documento": "CF o documento si está",
+  "concepto": "concepto si está",
+  "importe": 1000
+}
+
+Sé inteligente: normaliza números, detecta moneda, interpreta conceptos.`;
+
+    const msg = await groq.messages.create({
+      model: 'mixtral-8x7b-32768',
+      max_tokens: 300,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    const respuesta = msg.content[0].type === 'text' ? msg.content[0].text : '{}';
+    const jsonMatch = respuesta.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return {};
+
+    return JSON.parse(jsonMatch[0]);
+  } catch (error) {
+    logger.warn(`Groq extracción completa falla: ${error.message}`);
+    return {};
+  }
+}
+
+function obtenerCamposFaltantes(datos) {
+  const faltantes = [];
+  if (!datos.razon_social_cliente) faltantes.push('nombre_cliente');
+  if (!datos.documento_cliente) faltantes.push('documento_cliente');
+  if (!datos.concepto) faltantes.push('concepto');
+  if (!datos.importe) faltantes.push('importe');
+  return faltantes;
+}
 
 // ==========================================
 // FUNCIONES BÁSICAS DE CONVERSACIÓN
@@ -277,45 +390,70 @@ export async function procesarFacturaTexto(
 ) {
   try {
     if (paso === PASOS.FACTURA_NOMBRE_CLIENTE) {
-      if (texto.length < 3) {
-        await enviarTexto(numeroDeTelefono, PLANTILLAS.PEDIR_NOMBRE_CLIENTE);
+      const interpretacion = await groqInterpretarCampo('nombre_cliente', PLANTILLAS.PEDIR_NOMBRE_CLIENTE, texto);
+
+      if (!interpretacion.valido) {
+        await enviarTexto(numeroDeTelefono, interpretacion.duda || PLANTILLAS.PEDIR_NOMBRE_CLIENTE);
         return;
       }
-      await guardarDato(numeroDeTelefono, 'razon_social_cliente', texto);
+
+      if (interpretacion.duda) {
+        await enviarTexto(numeroDeTelefono, interpretacion.duda);
+        return;
+      }
+
+      await guardarDato(numeroDeTelefono, 'razon_social_cliente', interpretacion.valor);
       await siguientePaso(
         numeroDeTelefono,
         PASOS.FACTURA_DOCUMENTO_CLIENTE
       );
       await enviarTexto(numeroDeTelefono, PLANTILLAS.PEDIR_DOCUMENTO_CLIENTE);
     } else if (paso === PASOS.FACTURA_DOCUMENTO_CLIENTE) {
-      // Validar documento (CUIT, DNI, CF)
-      const doc = texto.toUpperCase().trim();
-      if (
-        !validarCUIT(doc) &&
-        !doc.startsWith('DNI') &&
-        doc !== 'CF'
-      ) {
-        await enviarTexto(numeroDeTelefono, PLANTILLAS.DOCUMENTO_INVALIDO);
+      const interpretacion = await groqInterpretarCampo('documento_cliente', PLANTILLAS.PEDIR_DOCUMENTO_CLIENTE, texto);
+
+      if (!interpretacion.valido) {
+        await enviarTexto(numeroDeTelefono, interpretacion.duda || PLANTILLAS.DOCUMENTO_INVALIDO);
         return;
       }
-      await guardarDato(numeroDeTelefono, 'documento_cliente', doc);
+
+      if (interpretacion.duda) {
+        await enviarTexto(numeroDeTelefono, interpretacion.duda);
+        return;
+      }
+
+      await guardarDato(numeroDeTelefono, 'documento_cliente', interpretacion.valor);
       await siguientePaso(numeroDeTelefono, PASOS.FACTURA_CONCEPTO);
       await enviarTexto(numeroDeTelefono, PLANTILLAS.PEDIR_CONCEPTO);
     } else if (paso === PASOS.FACTURA_CONCEPTO) {
-      if (texto.length < 3) {
-        await enviarTexto(numeroDeTelefono, PLANTILLAS.PEDIR_CONCEPTO);
+      const interpretacion = await groqInterpretarCampo('concepto', PLANTILLAS.PEDIR_CONCEPTO, texto);
+
+      if (!interpretacion.valido) {
+        await enviarTexto(numeroDeTelefono, interpretacion.duda || PLANTILLAS.PEDIR_CONCEPTO);
         return;
       }
-      await guardarDato(numeroDeTelefono, 'concepto', texto);
+
+      if (interpretacion.duda) {
+        await enviarTexto(numeroDeTelefono, interpretacion.duda);
+        return;
+      }
+
+      await guardarDato(numeroDeTelefono, 'concepto', interpretacion.valor);
       await siguientePaso(numeroDeTelefono, PASOS.FACTURA_IMPORTE);
       await enviarTexto(numeroDeTelefono, PLANTILLAS.PEDIR_IMPORTE);
     } else if (paso === PASOS.FACTURA_IMPORTE) {
-      // Validar que sea número
-      const importe = parseInt(texto);
-      if (isNaN(importe) || importe <= 0) {
-        await enviarTexto(numeroDeTelefono, PLANTILLAS.IMPORTE_INVALIDO);
+      const interpretacion = await groqInterpretarCampo('importe', PLANTILLAS.PEDIR_IMPORTE, texto);
+
+      if (!interpretacion.valido) {
+        await enviarTexto(numeroDeTelefono, interpretacion.duda || PLANTILLAS.IMPORTE_INVALIDO);
         return;
       }
+
+      if (interpretacion.duda) {
+        await enviarTexto(numeroDeTelefono, interpretacion.duda);
+        return;
+      }
+
+      const importe = interpretacion.valor;
       await guardarDato(numeroDeTelefono, 'importe', importe);
       await siguientePaso(
         numeroDeTelefono,
@@ -619,7 +757,45 @@ export async function procesarAudioConversacional(
       return;
     }
 
-    // En flujo: procesar como texto normal
+    // En flujo factura: extraer múltiples campos si están presentes
+    if (
+      paso === PASOS.FACTURA_NOMBRE_CLIENTE ||
+      paso === PASOS.FACTURA_DOCUMENTO_CLIENTE ||
+      paso === PASOS.FACTURA_CONCEPTO ||
+      paso === PASOS.FACTURA_IMPORTE
+    ) {
+      // Groq extrae TODOS los campos de la transcripción
+      const extraccion = await groqExtraerFacturaCompleta(transcripcion, datosActuales);
+
+      if (extraccion.nombre) await guardarDato(numeroDeTelefono, 'razon_social_cliente', extraccion.nombre);
+      if (extraccion.documento) await guardarDato(numeroDeTelefono, 'documento_cliente', extraccion.documento);
+      if (extraccion.concepto) await guardarDato(numeroDeTelefono, 'concepto', extraccion.concepto);
+      if (extraccion.importe) await guardarDato(numeroDeTelefono, 'importe', extraccion.importe);
+
+      const datos = { ...datosActuales, ...extraccion };
+      const faltantes = obtenerCamposFaltantes(datos);
+
+      if (faltantes.length === 0) {
+        // Todos completos → confirmación
+        await siguientePaso(numeroDeTelefono, PASOS.FACTURA_CONFIRMACION, datos);
+        await enviarTexto(
+          numeroDeTelefono,
+          PLANTILLAS.resumenFactura({
+            tipo_comprobante: 'Factura C',
+            ...datos,
+          })
+        );
+      } else {
+        // Faltan campos → preguntar por el primero faltante
+        const proximoPaso = PASOS[`FACTURA_${faltantes[0].toUpperCase()}`];
+        const pregunta = PLANTILLAS[`PEDIR_${faltantes[0].toUpperCase()}`];
+        await siguientePaso(numeroDeTelefono, proximoPaso, datos);
+        await enviarTexto(numeroDeTelefono, pregunta);
+      }
+      return;
+    }
+
+    // En onboarding: procesar como antes
     if (
       paso === PASOS.ONBOARDING_CUIT ||
       paso === PASOS.ONBOARDING_RAZON_SOCIAL ||
