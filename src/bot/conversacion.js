@@ -174,23 +174,37 @@ async function groqExtraerFacturaCompleta(transcripcion, datosActuales) {
     const Groq = (await import('groq-sdk')).default;
     const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-    const prompt = `Usuario dijo por audio: "${transcripcion}"
+    const prompt = `TAREA: Extraer TODOS los datos de factura del siguiente texto.
+Texto: "${transcripcion}"
 
-Estamos rellenando una factura. Extrae TODOS los campos que mencione:
-- nombre_cliente (nombre de la persona)
-- documento (CUIT, DNI, o CF)
-- concepto (qué es la factura)
-- importe (monto numérico)
+CAMPOS a buscar:
+- nombre: nombre del cliente (ej: "Juan García", "Empresa XYZ")
+- documento: número de ID (ej: "20-12345678-9" = CUIT, "12345678" = DNI, "CF" = consumidor final)
+- concepto: descripción del servicio/producto (ej: "diseño de remeras", "consultoría")
+- importe: cantidad de dinero (ej: "1000", "2500", "$1500", "500 pesos")
 
-Devuelve JSON con los campos que encuentres (omitir si no están):
+EJEMPLOS:
+Input: "tamara troche, por el servicio de diseño de remeras $1000"
+Output: {"nombre": "tamara troche", "concepto": "diseño de remeras", "importe": 1000}
+
+Input: "Juan García, documento 12345678, servicio de consultoría, $5000"
+Output: {"nombre": "Juan García", "documento": "12345678", "concepto": "consultoría", "importe": 5000}
+
+INSTRUCCIONES:
+1. Extrae CUALQUIER cosa que pueda ser un campo
+2. Normaliza números (quita $, pesos, guiones innecesarios)
+3. Si hay múltiples palabras juntas que parecen ser datos, sepáralos bien
+4. Devuelve SOLO JSON válido, sin explicaciones
+
+Responde SOLO con JSON (sin markdown, sin comillas extras):
 {
-  "nombre": "Nombre si está",
-  "documento": "CF o documento si está",
-  "concepto": "concepto si está",
-  "importe": 1000
+  "nombre": "...",
+  "documento": "...",
+  "concepto": "...",
+  "importe": número
 }
 
-Sé inteligente: normaliza números, detecta moneda, interpreta conceptos.`;
+Omite campos que NO tengas. Si no extraes nada, devuelve {}.`;
 
     const msg = await groq.messages.create({
       model: 'mixtral-8x7b-32768',
@@ -200,11 +214,16 @@ Sé inteligente: normaliza números, detecta moneda, interpreta conceptos.`;
 
     const respuesta = msg.content[0].type === 'text' ? msg.content[0].text : '{}';
     const jsonMatch = respuesta.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return {};
+    if (!jsonMatch) {
+      logger.warn(`Groq no extrae JSON: ${respuesta.substring(0, 100)}`);
+      return {};
+    }
 
-    return JSON.parse(jsonMatch[0]);
+    const resultado = JSON.parse(jsonMatch[0]);
+    logger.info(`[GROQ EXTRACCIÓN] Input: "${transcripcion}" → Output: ${JSON.stringify(resultado)}`);
+    return resultado;
   } catch (error) {
-    logger.warn(`Groq extracción completa falla: ${error.message}`);
+    logger.warn(`Groq extracción falla: ${error.message}`);
     return {};
   }
 }
