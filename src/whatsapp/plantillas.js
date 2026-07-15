@@ -162,23 +162,19 @@ const METODO_REGISTRO = `📝 ¿Cómo quieres registrarte?
 
 Respondé con 1 o 2.`;
 
-const INSTRUCCIONES_TODO_JUNTO = `📋 Enviá los datos en este orden, separados por línea nueva:
+const INSTRUCCIONES_TODO_JUNTO = `📋 Ya tengo tu CUIT y tu punto de venta configurados. Enviame estos 4 datos, en cualquier orden, separados por línea nueva:
 
 1. Nombre o razón social
-2. CUIT (sin guiones, ej: 20347351300)
-3. Email
-4. Domicilio
-5. Condición IVA (1=Monotributista, 2=Responsable Inscripto)
-6. Punto de venta (número)
+2. Email
+3. Domicilio
+4. Condición IVA (1=Monotributista, 2=Responsable Inscripto)
 
 Ejemplo:
 \`\`\`
 Carlos Federico GUNTHER
-20347351300
 cf@mail.com
 Felix de Azara 1815
 1
-2
 \`\`\``;
 
 const onboardingCompleto = (datos) => `🎉 ¡Todo listo! Tu cuenta está configurada.

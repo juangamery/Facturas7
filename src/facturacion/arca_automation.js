@@ -9,9 +9,11 @@
 
 import Afip from '@afipsdk/afip.js';
 import { logger, logearError } from '../logger.js';
+import { actualizarUsuario } from '../db.js';
 import { execSync } from 'child_process';
 import { readFileSync, unlinkSync } from 'fs';
 import { join } from 'path';
+import { cifrarDato } from './afipsdk_registro.js';
 
 const TEMP_DIR = '/tmp/arca_setup';
 const CUIT_FACTURAS7 = '20347351300'; // Tu CUIT
@@ -86,7 +88,8 @@ async function obtenerPuntoVentaDisponible(cuit, certificado, clavePrivada) {
 }
 
 // FLUJO COMPLETO: Configurar ARCA automáticamente
-export async function configurarARCAAutomatico(cuit, clavePrivada) {
+// Persiste certificado + punto_venta en BD del usuario (única vez, no se repite en onboarding)
+export async function configurarARCAAutomatico(usuarioId, cuit, clavePrivada) {
   try {
     logger.info(`📝 Iniciando configuración automática ARCA para ${cuit}...`);
 
@@ -100,15 +103,25 @@ export async function configurarARCAAutomatico(cuit, clavePrivada) {
     // Por ahora asumir que usuario delegó manualmente
     logger.info(`ℹ️ Delegación manual: usuario debe delegar a ${CUIT_FACTURAS7} en ARCA`);
 
-    logger.info(`✅ Configuración ARCA completa para ${cuit}`);
+    // 4. Persistir certificado en BD (cifrado). NO se guarda clavePrivada del usuario.
+    await actualizarUsuario(usuarioId, {
+      cuit,
+      punto_venta: puntoVenta,
+      afipsdk_cert: cifrarDato(certificado),
+      afipsdk_key: null,
+      afipsdk_entorno: 'homologacion',
+      afipsdk_status: 'autorizado',
+      actualizado_en: Math.floor(Date.now() / 1000),
+    });
 
-    // Clave privada se descarta automáticamente aquí (no se guarda)
+    logger.info(`✅ Configuración ARCA completa para ${cuit} (certificado guardado)`);
+
+    // Clave privada del usuario se descarta aquí (nunca se persiste)
 
     return {
       exito: true,
       cuit,
       punto_venta: puntoVenta,
-      certificado, // Se guarda para futuras emisiones
       mensaje: `✅ ¡Cuenta configurada! Punto de venta: ${puntoVenta}`,
     };
   } catch (error) {

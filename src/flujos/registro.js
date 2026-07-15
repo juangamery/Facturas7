@@ -66,7 +66,7 @@ export async function manejarRegistro(numeroDeTelefono, texto, usuarioAcceso) {
     // Hacer automation ARCA
     try {
       const { configurarARCAAutomatico } = await import('../facturacion/arca_automation.js');
-      const resultado = await configurarARCAAutomatico(cuit, claveFiscal);
+      const resultado = await configurarARCAAutomatico(usuario.id, cuit, claveFiscal);
 
       if (resultado.exito) {
         await enviarTexto(numeroDeTelefono, PLANTILLAS.PRE_SETUP_EXITO);
@@ -109,10 +109,21 @@ export async function manejarRegistro(numeroDeTelefono, texto, usuarioAcceso) {
   }
 
   // Todo de una vez: Groq identifica cada línea sin importar orden
+  // CUIT y punto de venta YA se conocen del PRE_SETUP (no se piden de nuevo)
   if (paso === PASOS.REG_TODO_JUNTO) {
-    const lineas = texto.trim().split('\n').map(l => l.trim());
-    if (lineas.length < 6) {
-      await enviarTexto(numeroDeTelefono, '❌ Necesito 6 datos: nombre, CUIT, email, domicilio, IVA, punto venta.');
+    const lineas = texto.trim().split('\n').map(l => l.trim()).filter(Boolean);
+    if (lineas.length < 4) {
+      await enviarTexto(numeroDeTelefono, '❌ Necesito 4 datos: nombre, email, domicilio, condición IVA.');
+      return;
+    }
+
+    const datosActuales = conv?.datos ? JSON.parse(conv.datos) : {};
+    const cuit = datosActuales.cuit;
+    const puntoVenta = datosActuales.punto_venta;
+
+    if (!cuit || !puntoVenta) {
+      logger.error(`REG_TODO_JUNTO sin cuit/punto_venta previos: ${JSON.stringify(datosActuales)}`);
+      await enviarTexto(numeroDeTelefono, '❌ Falta configuración previa. Escribí "hola" para reiniciar.');
       return;
     }
 
@@ -120,7 +131,7 @@ export async function manejarRegistro(numeroDeTelefono, texto, usuarioAcceso) {
     try {
       const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-      const prompt = `TAREA CRÍTICA: Clasificar 6 líneas de datos de registro. El orden NO IMPORTA.
+      const prompt = `TAREA CRÍTICA: Clasificar 4 líneas de datos de registro. El orden NO IMPORTA.
 
 Líneas del usuario:
 ${lineas.map((l, i) => `${i+1}. "${l}"`).join('\n')}
@@ -129,9 +140,6 @@ IDENTIFICA EXACTAMENTE QUÉ ES CADA LÍNEA:
 
 NOMBRE: nombre completo, razón social, empresa (NO números, NO emails, NO direcciones)
   Ejemplo: "Carlos Federico", "Empresa XYZ"
-
-CUIT: 11 dígitos, puede tener guiones/puntos
-  Ejemplo: "20347351300", "20-34735130-0"
 
 EMAIL: contiene @ y punto
   Ejemplo: "cf@gunther@gmail.com", "empresa@mail.com"
@@ -142,22 +150,17 @@ DOMICILIO: calle, avenida, número, pero NO números solos ni emails
 IVA: solo 1 o 2
   Ejemplo: "1" = Monotributista, "2" = Responsable
 
-PUNTO_VENTA: número pequeño (típicamente 1-999)
-  Ejemplo: "1", "5", "10"
-
 DEVUELVE SOLO JSON (sin markdown, sin comillas extras):
 {
   "nombre": "1",
-  "cuit": "2",
-  "email": "3",
-  "domicilio": "4",
-  "iva": "5",
-  "punto_venta": "6"
+  "email": "2",
+  "domicilio": "3",
+  "iva": "4"
 }
 
 Reglas:
 - SIEMPRE devuelve JSON válido
-- Los valores son números de línea (1-6)
+- Los valores son números de línea (1-4)
 - Si no encuentras un campo, omítelo
 - NO guesses: si no está seguro, omite`;
 
@@ -193,34 +196,28 @@ Reglas:
 
       // Validar y normalizar
       const nombre = datos.nombre;
-      const cuit = (datos.cuit || '').replace(/[-.\s]/g, '');
       const email = datos.email;
       const domicilio = datos.domicilio;
       const iva = parseInt(datos.iva);
-      const punto = parseInt(datos.punto_venta);
 
       if (!nombre || nombre.length < 2) {
         await enviarTexto(numeroDeTelefono, '❌ Nombre no reconocido.');
-        return;
-      }
-      if (cuit.length !== 11 || isNaN(parseInt(cuit))) {
-        await enviarTexto(numeroDeTelefono, '❌ CUIT no válido (debe ser 11 dígitos).');
         return;
       }
       if (!EMAIL_RE.test(email)) {
         await enviarTexto(numeroDeTelefono, `❌ Email no válido: "${email}".`);
         return;
       }
+      if (!domicilio || domicilio.length < 3) {
+        await enviarTexto(numeroDeTelefono, '❌ Domicilio no reconocido.');
+        return;
+      }
       if (![1, 2].includes(iva)) {
         await enviarTexto(numeroDeTelefono, '❌ IVA debe ser 1 o 2.');
         return;
       }
-      if (isNaN(punto) || punto < 1) {
-        await enviarTexto(numeroDeTelefono, '❌ Punto de venta no válido.');
-        return;
-      }
 
-      // Guardar en BD
+      // Guardar en BD (cuit y punto_venta ya vienen del PRE_SETUP)
       const ahora = Math.floor(Date.now() / 1000);
       await actualizarUsuario(usuario.id, {
         nombre,
@@ -229,22 +226,19 @@ Reglas:
         razon_social: nombre,
         domicilio,
         condicion_iva: iva === 1 ? 'Monotributista' : 'Responsable Inscripto',
-        punto_venta: punto,
+        punto_venta: puntoVenta,
         activo: 1,
         plan: 'trial',
         estado_registro: 'trial',
         fecha_vencimiento: ahora + SIETE_DIAS,
       });
 
-      // Post-registro → ONBOARDING (no MENU) para pedir clave fiscal + AFIPSDK
-      await siguientePaso(numeroDeTelefono, PASOS.ONBOARDING_CUIT, {
-        cuit,
-        razon_social: nombre,
-        domicilio,
-        condicion_iva: iva === 1 ? 'Monotributista' : 'Responsable Inscripto',
-        punto_venta: punto,
-      });
-      await enviarTexto(numeroDeTelefono, '✅ Registrado! Ahora completá onboarding. Escribí tu CUIT (ya lo tenemos, confirmá o corregí):');
+      // Ya está TODO configurado (ARCA + datos de negocio) → directo al menú, sin onboarding redundante
+      await limpiarConversacion(numeroDeTelefono);
+      await enviarTexto(
+        numeroDeTelefono,
+        `✅ ¡Listo! Tu cuenta está configurada:\n\n• CUIT: ${cuit}\n• Razón social: ${nombre}\n• Domicilio: ${domicilio}\n• Punto de venta: ${puntoVenta}\n\nEscribí algo para ver el menú.`
+      );
       await enviarLinkPago(numeroDeTelefono, { id: usuario.id, email, nombre, cuit }, true);
     } catch (error) {
       logger.error(`Groq clasificación falla: ${error.message}`);
