@@ -28,6 +28,10 @@ export const PASOS = {
   // Menu principal
   MENU_PRINCIPAL: 'menu_principal',
 
+  // Pre-setup ARCA (usuario nuevo)
+  PRE_SETUP_METODO: 'pre_setup_metodo',
+  PRE_SETUP_AUTOMATICO: 'pre_setup_automatico',
+
   // Registro (usuario nuevo sin acceso)
   REG_METODO: 'reg_metodo',
   REG_NOMBRE: 'reg_nombre',

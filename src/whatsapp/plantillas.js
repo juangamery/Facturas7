@@ -64,17 +64,33 @@ Si el problema persiste contactanos:
 // PRE-SETUP: CONFIGURACIÓN ARCA REQUERIDA
 // ==========================================
 
-const PRE_SETUP_REQUERIDO = `📋 ¡IMPORTANTE! Antes de registrarte necesitás completar 2 pasos en ARCA.
+const PRE_SETUP_REQUERIDO = `📋 ¡IMPORTANTE! Necesitás configurar ARCA antes de registrarte.
 
-Es muy simple (2 minutos):
+Tenés 2 opciones:
 
-**Paso 1:** Delegá la facturación electrónica a Facturitas7 en ARCA
-**Paso 2:** Creá tu punto de venta para Web Services
+1️⃣ **Manual** - Vos hacés los pasos en ARCA (2 min)
+2️⃣ **Automático** - Yo lo hago por vos (solo necesito tu clave fiscal)
 
-👉 Lee la guía completa aquí:
+¿Cuál prefieres? Respondé con 1 o 2.`;
+
+const PRE_SETUP_MANUAL = `✅ Perfecto. Seguí estos pasos:
+
+📋 **Paso 1:** Delegá facturación electrónica en ARCA
+📋 **Paso 2:** Creá tu punto de venta para Web Services
+
+👉 Guía completa:
 https://github.com/juangamery/Facturas7/blob/main/SETUP_ARCA.md
 
-Una vez completado, volvé aquí y decime algo. ✅`;
+Una vez completado, volvé aquí y decime algo. Continuaremos con tu registro. ✅`;
+
+const PRE_SETUP_AUTOMATICO = `🤖 Yo me encargo. Solo necesito tu clave fiscal de AFIP.
+
+⚠️ La usaré UNA SOLA VEZ para:
+✅ Delegar facturación electrónica
+✅ Crear tu punto de venta
+✅ Luego la descarto completamente (nunca la guardamos)
+
+¿Compartís tu clave fiscal?`;
 
 // ==========================================
 // FLUJO 1 — ONBOARDING
@@ -438,6 +454,8 @@ export {
 
   // Pre-setup ARCA
   PRE_SETUP_REQUERIDO,
+  PRE_SETUP_MANUAL,
+  PRE_SETUP_AUTOMATICO,
 
   // Registro (usuario desconocido)
   pedir_nombre_registro,

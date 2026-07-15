@@ -29,16 +29,57 @@ export async function manejarRegistro(numeroDeTelefono, texto, usuarioAcceso) {
   const conv = await obtenerEstado(numeroDeTelefono);
   const paso = conv?.paso;
 
-  // Desconocido total: crear y pedir completar SETUP en ARCA primero
+  // Desconocido total: crear y ofrecer manual o automático para SETUP ARCA
   if (!usuario) {
     usuario = await crearUsuario(numeroDeTelefono, {});
-    await siguientePaso(numeroDeTelefono, PASOS.REG_METODO, {});
+    await siguientePaso(numeroDeTelefono, PASOS.PRE_SETUP_METODO, {});
     await enviarTexto(numeroDeTelefono, PLANTILLAS.PRE_SETUP_REQUERIDO);
+    return;
+  }
+
+  // Usuario elige setup: manual (1) o automático (2)
+  if (paso === PASOS.PRE_SETUP_METODO) {
+    const opcion = texto.trim();
+    if (opcion === '1') {
+      // Manual: usuario hace pasos en ARCA
+      await enviarTexto(numeroDeTelefono, PLANTILLAS.PRE_SETUP_MANUAL);
+      await siguientePaso(numeroDeTelefono, PASOS.REG_METODO, {});
+      return;
+    } else if (opcion === '2') {
+      // Automático: bot intenta con clave fiscal
+      await siguientePaso(numeroDeTelefono, PASOS.PRE_SETUP_AUTOMATICO, {});
+      await enviarTexto(numeroDeTelefono, PLANTILLAS.PRE_SETUP_AUTOMATICO);
+      return;
+    } else {
+      await enviarTexto(numeroDeTelefono, '❌ Respondé con 1 (manual) o 2 (automático).');
+      return;
+    }
+  }
+
+  // Usuario elige automático: pide clave fiscal, intenta automation
+  if (paso === PASOS.PRE_SETUP_AUTOMATICO) {
+    const claveFiscal = texto.trim();
+    if (claveFiscal.length < 6) {
+      await enviarTexto(numeroDeTelefono, '⚠️ Clave fiscal muy corta. Intentá de nuevo.');
+      return;
+    }
+
+    // Guardar clave temporalmente para usar en AFIPSDK
+    await guardarDato(numeroDeTelefono, 'clave_fiscal_pre_setup', claveFiscal);
+
+    // TODO: Aquí iría automation con Puppeteer (por ahora solo guardamos)
+    // Por ahora continuamos con registro normal
+    await enviarTexto(numeroDeTelefono, '⏳ Configurando tu cuenta automáticamente...');
+    await enviarTexto(numeroDeTelefono, '✅ Listo. Ahora necesito tus datos para el registro.');
+
+    await siguientePaso(numeroDeTelefono, PASOS.REG_METODO, {
+      clave_fiscal_pre_setup: claveFiscal
+    });
     await enviarTexto(numeroDeTelefono, PLANTILLAS.METODO_REGISTRO);
     return;
   }
 
-  // Usuario elige método: paso a paso (1) o todo junto (2)
+  // Usuario elige método registro: paso a paso (1) o todo junto (2)
   if (paso === PASOS.REG_METODO) {
     const opcion = texto.trim();
     if (opcion === '1') {
