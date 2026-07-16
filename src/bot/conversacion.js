@@ -232,6 +232,52 @@ Omite campos que NO tengas. Si no extraes nada, devuelve {}.`;
   }
 }
 
+// Interpreta un pedido de corrección sobre una factura ya armada
+// (ej: "agregá el concepto de administración de redes por $1500",
+// "el importe es 2000 no 1000"). Devuelve los datos actualizados o
+// null si el mensaje no es una corrección reconocible.
+async function groqCorregirFactura(texto, datosActuales) {
+  try {
+    const Groq = (await import('groq-sdk')).default;
+    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+
+    const prompt = `Estoy por emitir esta factura:
+- Cliente: ${datosActuales.razon_social_cliente || ''}
+- Documento: ${datosActuales.documento_cliente || ''}
+- Concepto: ${datosActuales.concepto || ''}
+- Importe: ${datosActuales.importe || ''}
+
+El usuario respondió (no es un SI/NO simple): "${texto}"
+
+Si es un pedido de corrección (agregar/cambiar concepto, importe, cliente o documento),
+devolvé los 4 campos ACTUALIZADOS combinando lo que ya había con el cambio pedido.
+Si pide "agregar" un concepto/ítem, concatenalo al concepto existente y SUMÁ los importes.
+Si el mensaje NO es una corrección (es ruido, pregunta no relacionada, etc), devolvé {}.
+
+Responde SOLO JSON:
+{"razon_social_cliente": "...", "documento_cliente": "...", "concepto": "...", "importe": numero}`;
+
+    const msg = await groq.chat.completions.create({
+      model: 'llama-3.3-70b-versatile',
+      max_tokens: 300,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    const respuesta = msg.choices[0]?.message?.content || '{}';
+    const jsonMatch = respuesta.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return null;
+
+    const resultado = JSON.parse(jsonMatch[0]);
+    if (!resultado.concepto && !resultado.importe && !resultado.razon_social_cliente) return null;
+
+    logger.info(`[GROQ CORRECCIÓN] Input: "${texto}" → Output: ${JSON.stringify(resultado)}`);
+    return { ...datosActuales, ...resultado };
+  } catch (error) {
+    logger.warn(`Groq corrección falla: ${error.message}`);
+    return null;
+  }
+}
+
 function obtenerCamposFaltantes(datos) {
   const faltantes = [];
   if (!datos.razon_social_cliente) faltantes.push('nombre_cliente');
@@ -310,18 +356,25 @@ export function detectarIntencion(texto) {
   return null;
 }
 
+// Match de PALABRA COMPLETA (no substring). Antes usaba .includes(), y como
+// PALABRAS_SI incluye 's' suelta, CUALQUIER frase con la letra "s" (o sea,
+// casi cualquier oración en español) se leía como confirmación positiva.
+function contienePalabraExacta(texto, palabras) {
+  const normalizado = ` ${texto.toLowerCase().trim()} `;
+  return palabras.some((p) => {
+    const regex = new RegExp(`[^a-záéíóúñ0-9]${p}[^a-záéíóúñ0-9]`, 'i');
+    return regex.test(normalizado);
+  });
+}
+
 // Verifica si el texto es confirmación positiva
 export function esConfirmacionSI(texto) {
-  return PLANTILLAS.PALABRAS_SI.some((p) =>
-    texto.toLowerCase().includes(p)
-  );
+  return contienePalabraExacta(texto, PLANTILLAS.PALABRAS_SI);
 }
 
 // Verifica si el texto es confirmación negativa
 export function esConfirmacionNO(texto) {
-  return PLANTILLAS.PALABRAS_NO.some((p) =>
-    texto.toLowerCase().includes(p)
-  );
+  return contienePalabraExacta(texto, PLANTILLAS.PALABRAS_NO);
 }
 
 // ==========================================
@@ -759,7 +812,18 @@ export async function procesarFacturaTexto(
           PLANTILLAS.DATOS_INCORRECTOS_FACTURA
         );
       } else {
-        await enviarTexto(numeroDeTelefono, 'Respondé SI o NO.');
+        // No es SI/NO claro → puede ser un pedido de corrección
+        // ("agregá otro concepto", "el importe es 2000 no 1000", etc.)
+        const corregido = await groqCorregirFactura(texto, datosActuales);
+        if (corregido) {
+          await siguientePaso(numeroDeTelefono, PASOS.FACTURA_CONFIRMACION, corregido);
+          await enviarTexto(
+            numeroDeTelefono,
+            `✏️ Actualicé la factura:\n\n${PLANTILLAS.resumenFactura({ tipo_comprobante: 'Factura C', ...corregido })}`
+          );
+        } else {
+          await enviarTexto(numeroDeTelefono, 'No entendí. Respondé SI para confirmar, NO para volver a cargar, o decime qué corregir (ej: "el importe es 2000").');
+        }
       }
     }
   } catch (error) {

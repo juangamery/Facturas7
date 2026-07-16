@@ -38,9 +38,15 @@ export async function manejarRegistro(numeroDeTelefono, texto, usuarioAcceso) {
   }
 
   // Paso 1: Capturar CUIT del usuario
+  // Tolerante a texto extra en el mismo mensaje (ej: "20347351300\ny mi clave es X")
   if (paso === PASOS.PRE_SETUP_CUIT) {
-    const cuit = texto.trim().replace(/[-.\s]/g, '');
-    if (cuit.length !== 11 || isNaN(parseInt(cuit))) {
+    const candidatos = texto.match(/\d[\d.\-\s]{8,}\d/g) || [];
+    let cuit = candidatos.map(c => c.replace(/\D/g, '')).find(d => d.length === 11);
+    if (!cuit) {
+      const soloDigitos = texto.replace(/\D/g, '');
+      if (soloDigitos.length === 11) cuit = soloDigitos;
+    }
+    if (!cuit) {
       await enviarTexto(numeroDeTelefono, '❌ CUIT inválido. Debe tener 11 dígitos. Ej: 20-34735130-0');
       return;
     }
@@ -92,8 +98,10 @@ export async function manejarRegistro(numeroDeTelefono, texto, usuarioAcceso) {
   }
 
   // Usuario elige método registro: paso a paso (1) o todo junto (2)
+  // Tolerante a frases (ej: "Bien el 2", "quiero la 1") — extrae dígito suelto
   if (paso === PASOS.REG_METODO) {
-    const opcion = texto.trim();
+    const match = texto.match(/(?<![\d.])[12](?![\d.])/);
+    const opcion = match ? match[0] : texto.trim();
     if (opcion === '1') {
       await siguientePaso(numeroDeTelefono, PASOS.REG_NOMBRE);
       await enviarTexto(numeroDeTelefono, PLANTILLAS.pedir_nombre_registro);
