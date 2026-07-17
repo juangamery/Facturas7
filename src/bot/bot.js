@@ -111,8 +111,15 @@ async function procesarTextoGenerico(numeroDeTelefono, texto, usuario) {
       : {};
 
     // CANCELAR en cualquier momento
-    if (detectarIntencion(texto) === 'CANCELAR') {
+    const intencionGlobal = detectarIntencion(texto);
+    if (intencionGlobal === 'CANCELAR') {
       await cancelarOperacion(numeroDeTelefono);
+      return;
+    }
+    // MENU: ir directo al menú, sin decir "cancelado" (no hay nada que cancelar)
+    if (intencionGlobal === 'MENU') {
+      await limpiarConversacion(numeroDeTelefono);
+      await mostrarMenuPrincipal(numeroDeTelefono, usuario);
       return;
     }
 

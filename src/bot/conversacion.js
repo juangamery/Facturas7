@@ -352,6 +352,9 @@ export function detectarIntencion(texto) {
   if (PLANTILLAS.PALABRAS_CANCELAR.some((p) => t.includes(p))) {
     return 'CANCELAR';
   }
+  if (PLANTILLAS.PALABRAS_MENU.some((p) => t.includes(p))) {
+    return 'MENU';
+  }
 
   return null;
 }

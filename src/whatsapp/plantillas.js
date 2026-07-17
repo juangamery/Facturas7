@@ -68,13 +68,16 @@ const PRE_SETUP_REQUERIDO = `🚀 ¡Bienvenido a Facturas7!
 
 Voy a configurar automáticamente tu cuenta en ARCA. Toma 1 minuto.
 
-Necesito:
-1️⃣ Tu CUIT
-2️⃣ Tu clave fiscal AFIP
+Necesito tu CUIT y tu clave fiscal AFIP.
 
 ⚠️ Tu clave se usa UNA SOLA VEZ y se descarta completamente.
 
-¿Cuál es tu CUIT? (Ejemplo: 20-34735130-0)`;
+Podés mandarme los dos datos juntos, uno por línea:
+\`\`\`
+20-34735130-0
+tuClaveFiscal
+\`\`\`
+O si preferís, uno a la vez. Empecemos: ¿cuál es tu CUIT?`;
 
 const PRE_SETUP_CUIT_RECIBIDO = `✅ CUIT recibido.
 
@@ -171,9 +174,9 @@ const INSTRUCCIONES_TODO_JUNTO = `📋 Ya tengo tu CUIT y tu punto de venta conf
 
 Ejemplo:
 \`\`\`
-Carlos Federico GUNTHER
-cf@mail.com
-Felix de Azara 1815
+Juan Pérez
+juan@mail.com
+Av. Corrientes 1234
 1
 \`\`\``;
 
@@ -438,7 +441,8 @@ Estamos para ayudarte. 😊`;
 const PALABRAS_FACTURA = ['factura', 'facturar', 'emitir', '1', 'nueva', 'hacer', 'crear'];
 const PALABRAS_ULTIMA = ['última', 'ultima', 'último', 'ultimo', 'ver', '2', 'historial', 'pasada'];
 const PALABRAS_DATOS = ['datos', 'cuenta', 'perfil', 'información', 'info', '3', 'mi'];
-const PALABRAS_CANCELAR = ['cancelar', 'cancel', 'salir', 'exit', 'menu', 'menú', 'inicio', 'volver'];
+const PALABRAS_CANCELAR = ['cancelar', 'cancel', 'salir', 'exit'];
+const PALABRAS_MENU = ['menu', 'menú', 'inicio', 'volver'];
 const PALABRAS_SI = ['si', 'sí', 'yes', 'ok', 'dale', 'confirmar', 'confirmo', 'correcto', 's', 'bueno'];
 const PALABRAS_NO = ['no', 'nop', 'nope', 'incorrecto', 'mal', 'n', 'negativo'];
 
@@ -524,6 +528,7 @@ export {
   PALABRAS_ULTIMA,
   PALABRAS_DATOS,
   PALABRAS_CANCELAR,
+  PALABRAS_MENU,
   PALABRAS_SI,
   PALABRAS_NO,
 };
