@@ -121,16 +121,15 @@ async function iniciar() {
     //   logger.warn(`Email service no disponible: ${error.message}`);
     // }
 
-    // 6. Wappfly: usamos el WEBHOOK real (trae número real del remitente),
-    //    no el polling (que solo da @lid, no entregable).
-    //    Polling desactivado para no gastar quota respondiendo a @lid.
+    // 6. Meta usa webhook push, no polling. iniciarPolling() queda como no-op
+    //    por compatibilidad de import (ver webhook.js).
     // iniciarPolling();
 
     // 7. Iniciar servidor Express
     app.listen(PORT, () => {
       logger.info(`🚀 Servidor corriendo en ${BASE_URL}`);
       logger.info(`📊 Panel admin: ${BASE_URL}/admin/login`);
-      logger.info(`⚡ Webhook Wappfly: ${BASE_URL}/webhooks/whatsapp`);
+      logger.info(`⚡ Webhook Meta: ${BASE_URL}/webhooks/whatsapp`);
       logger.info(`💳 Webhook MP: ${BASE_URL}/webhooks/mercadopago`);
       logger.info(`📈 Health check: ${BASE_URL}/health`);
     });

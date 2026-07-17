@@ -2,7 +2,6 @@
 // INTEGRACIÓN META CLOUD API - Envío de mensajes
 // ==========================================
 // Envío de texto, documentos (PDF) e imágenes vía WhatsApp Cloud API (Meta).
-// Reemplaza la capa Wappfly. Mantiene las mismas firmas de export.
 
 import { logger, logearError } from '../logger.js';
 import axios from 'axios';

@@ -1,88 +1,78 @@
 # Facturas7 - SaaS Facturación Electrónica Argentina
 
-Plataforma de facturación electrónica para Argentina con WhatsApp, Afip CAE y Mercado Pago.
+Plataforma de facturación electrónica para Argentina vía WhatsApp, con AFIPSDK (ARCA) y Mercado Pago.
 
 ## Arquitectura
 
 - **Backend:** Node.js + Express + Supabase
 - **Frontend:** React 18 + Vite + Bootstrap 5
-- **WhatsApp:** Wappfly API (QR code)
-- **Chat Admin:** Chatwoot (legacy)
-- **Facturación:** Afip CAE + pdfkit
+- **WhatsApp:** Meta Cloud API (WhatsApp Business Platform)
+- **IA:** Groq (interpretación de texto/audio) + Google Gemini Vision (imágenes)
+- **Facturación:** AFIPSDK (@afipsdk/afip.js) + pdfkit
 - **Pago:** Mercado Pago suscripciones
 
 ## Features
 
-✅ **Registro usuario vía WhatsApp**
-- Comprobante de pago manual
-- Verificación admin
-- Datos: nombre, teléfono, CUIT
+✅ **Registro + setup automático**
+- Usuario da CUIT + clave fiscal (se usa una vez, se descarta)
+- Bot delega facturación electrónica y obtiene punto de venta automáticamente
+- Datos de negocio (nombre, email, domicilio, condición IVA) en un solo mensaje
 
-✅ **Facturas desde WhatsApp**
-- Enviar concepto + importe
-- Generación PDF automática
-- CAE Afip (integrado)
+✅ **Facturas desde WhatsApp (texto, audio o imagen)**
+- Groq interpreta lenguaje libre, sin orden fijo
+- Soporta múltiples conceptos/importes en una factura
+- Gemini Vision extrae datos de una foto de recibo/comprobante
+- Generación de PDF con layout tipo ARCA + QR (RG 4892/2020)
+- CAE real vía AFIPSDK (mock en homologación si AFIP falla)
 
 ✅ **Panel Admin**
-- Verificar comprobantes pago
-- Ver clientes
-- Ver facturas
-- Gestionar suscripciones
-
-✅ **Integraciones**
-- Wappfly (WhatsApp - QR code)
-- Chatwoot (soporte)
-- Afip (CAE)
-- Mercado Pago (suscripción)
+- Ver clientes, facturas, suscripciones
 
 ## Setup
 
-### 1. Clonar repo
-```bash
-cd /Users/carlosfedericogunther/Downloads/Claudio/Facturas7
-```
+### 1. Variables de entorno (.env)
 
-### 2. Variables entorno (.env)
-
-Ver `.env.example` para lista completa. Mínimas requeridas:
+Ver `.env.example` para la lista completa. Mínimas requeridas:
 
 ```bash
-# ===== OBLIGATORIO =====
-# Wappfly (obtener en https://wappfly.com)
-WAPPFLY_TOKEN=tu-token-de-wappfly
+# WhatsApp Cloud API (Meta for Developers)
+WHATSAPP_TOKEN=
+WHATSAPP_PHONE_NUMBER_ID=
+WHATSAPP_VERIFY_TOKEN=
+WHATSAPP_API_VERSION=v21.0
 
 # Supabase
-SUPABASE_URL=https://tu-supabase-url.supabase.co
-SUPABASE_KEY=tu-supabase-key
+SUPABASE_URL=
+SUPABASE_KEY=
 
 # Admin
 ADMIN_USER=admin
-ADMIN_PASSWORD=admin123
-SESSION_SECRET=tu-secret-aqui
+ADMIN_PASSWORD=
+SESSION_SECRET=
 
 # App
-PORT=3001
-BASE_URL=http://localhost:3001
+PORT=3000
+BASE_URL=http://localhost:3000
 ```
 
-Opcional:
+Opcional (habilita features):
 ```bash
-# Mercado Pago (suscripciones)
+# IA
+GROQ_API_KEY=          # interpretación texto/audio, requerido para el flujo conversacional
+GOOGLE_API_KEY=        # Gemini Vision (fotos de facturas/recibos)
+ANTHROPIC_API_KEY=     # fallback de visión si no hay GOOGLE_API_KEY
+
+# AFIPSDK
+AFIPSDK_TOKEN=
+AFIPSDK_ENTORNO=homologacion
+
+# Mercado Pago
 MP_ACCESS_TOKEN=
 MP_PLAN_BASICO_ID=
 MP_PLAN_PREMIUM_ID=
-
-# IA
-GROQ_API_KEY=
-ANTHROPIC_API_KEY=
-
-# Email
-MAIL_HOST=
-MAIL_USER=
-MAIL_PASS=
 ```
 
-### 3. Instalar dependencias
+### 2. Instalar dependencias
 
 **Backend:**
 ```bash
@@ -91,204 +81,87 @@ npm install
 
 **Frontend:**
 ```bash
-cd frontend
-npm install
-cd ..
+cd frontend && npm install && cd ..
 ```
 
-### 4. Iniciar servidores
+### 3. Base de datos (Supabase)
 
-**Terminal 1 - Backend (puerto 3000):**
+Correr las migraciones en `db/migrations/` (SQL Editor de Supabase), en orden por fecha de archivo.
+
+### 4. Iniciar
+
 ```bash
 npm start
 ```
 
-**Terminal 2 - Frontend (puerto 5173):**
-```bash
-cd frontend
-npm run dev
-```
-
-### 5. Acceso
-
 - **Admin panel:** http://localhost:3000/admin/login
-- **React app:** http://localhost:5173
 - **Health check:** http://localhost:3000/health
 
-## Flujo usuario
+## Configurar WhatsApp Cloud API (Meta)
 
-### 1. Nuevo usuario
+1. Crear app en [Meta for Developers](https://developers.facebook.com) con producto WhatsApp
+2. Copiar `WHATSAPP_TOKEN` y `WHATSAPP_PHONE_NUMBER_ID` desde API Setup
+3. Configurar el webhook: **URL** `https://tu-dominio/webhooks/whatsapp`, **Verify Token** el mismo valor que `WHATSAPP_VERIFY_TOKEN`, suscribirse al evento `messages`
+
+## Flujo de usuario nuevo
+
 ```
-Usuario envía mensaje a WhatsApp
+Usuario escribe al bot
     ↓
-Bot: "Costo $500/mes. Paga aquí [link MP]"
+Bot pide CUIT + clave fiscal AFIP (se usa una vez, se descarta)
     ↓
-Usuario envía comprobante
+Bot configura ARCA automáticamente (certificado + punto de venta)
     ↓
-Admin aprueba en panel
+Usuario manda nombre/email/domicilio/condición IVA (en cualquier orden)
     ↓
-Bot: "¿Tu nombre?"
-Usuario: "Juan"
+Trial de 7 días activado + link de pago Mercado Pago
     ↓
-Bot: "¿Tu teléfono?"
-Usuario: "1234567890"
-    ↓
-Bot: "¿Tu CUIT?" (opcional)
-Usuario: "20123456789"
-    ↓
-Bot: "Confirmas? SÍ/NO"
-Usuario: "SÍ"
-    ↓
-✅ Usuario registrado
+Listo para facturar
 ```
 
-### 2. Crear factura
+## Emitir factura
+
 ```
-Usuario envía: "Asesoría - $5000"
+Usuario: "Facturale a Juan Pérez, diseño de logo $5000, hosting $2000"
     ↓
-Bot: "¿Confirmas?"
-Usuario: "SÍ"
+Bot interpreta cliente + múltiples ítems, muestra resumen
     ↓
-✅ Factura generada
-📄 PDF enviado
+Usuario: "SI" (o pide una corrección: "el importe del hosting es 3000")
+    ↓
+Bot solicita CAE a AFIP, genera PDF, lo envía por WhatsApp
 ```
 
 ## Rutas API
 
 ### Públicas
-- `POST /webhooks/whatsapp` - Recibe mensajes Wappfly
-- `POST /webhooks/chatwoot` - Webhook Chatwoot (legacy)
+- `POST /webhooks/whatsapp` - Recibe mensajes de Meta
+- `POST /webhooks/mercadopago` - Webhook de pagos
 - `GET /health` - Health check
 
 ### Admin (requieren login)
 - `GET /admin/dashboard` - Stats
 - `GET /admin/clientes` - Lista clientes
-- `POST /admin/clientes/nuevo` - Crear cliente
 - `GET /admin/facturas` - Lista facturas
-- `POST /admin/facturas/nuevo` - Crear factura
-- `GET /admin/comprobantes` - Comprobantes pendientes
-- `POST /admin/comprobantes/:id/aprobar` - Aprobar
-- `POST /admin/comprobantes/:id/rechazar` - Rechazar
 
-## Estructura directorios
+## Estructura de directorios
 
 ```
 /Facturas7
 ├── src/
-│   ├── admin/          # Panel admin (routes, auth, views)
-│   ├── bot/            # Bot logic (webhook, conversación)
-│   ├── whatsapp/       # Wappfly integration (mensajes.js)
-│   ├── evolution/      # Evolution (legacy)
-│   ├── chatwoot/       # Chatwoot integration
-│   ├── afip/           # Afip CAE
-│   ├── mercadopago/    # Mercado Pago
-│   ├── facturacion/    # PDF, validaciones
-│   ├── ia/             # IA (vision, audio)
-│   ├── db.js           # Supabase + SQLite
-│   ├── logger.js       # Logging
+│   ├── admin/          # Panel admin
+│   ├── bot/            # Máquina de estados de conversación (conversacion.js, bot.js)
+│   ├── flujos/         # Registro, factura por texto/imagen
+│   ├── whatsapp/       # Meta Cloud API (mensajes.js, media.js, plantillas.js)
+│   ├── facturacion/    # AFIPSDK, PDF, validaciones
+│   ├── mercadopago/    # Suscripciones + webhook
+│   ├── ia/             # Vision/audio (legacy, ver flujos/imagen_vision.js para el path activo)
+│   ├── db.js           # Cliente Supabase
 │   └── index.js        # Entry point
-├── media/              # Downloaded media (images, audio)
-├── public/             # Static files
-├── .env                # Variables entorno
-├── .env.example        # Template de .env
-└── README.md           # Este archivo
+├── db/migrations/      # SQL, correr en orden en Supabase
+├── media/              # Media descargado de WhatsApp (gitignored)
+├── facturas/           # PDFs generados (gitignored)
+└── .env.example        # Template de .env
 ```
-
-## Configuración Afip
-
-1. Descargar certificado digital de CUIT
-2. Guardar en `/src/afip/certificado.pem`
-3. Configurar en `.env`:
-   ```
-   AFIP_CUIT=tu_cuit
-   AFIP_CERTIFICADO_PATH=/src/afip/certificado.pem
-   ```
-
-## Configuración Mercado Pago
-
-1. Crear cuenta Mercado Pago
-2. Ir a Settings → Credentials
-3. Copiar Access Token
-4. Crear plan de suscripción ($500/mes)
-5. Configurar en `.env`:
-   ```
-   MP_ACCESS_TOKEN=tu_token
-   MP_PLAN_ID=tu_plan_id
-   ```
-
-## Configuración Wappfly
-
-### 1. Crear cuenta Wappfly
-- Ir a https://wappfly.com
-- Sign up / registrarse
-- Completa datos de empresa
-
-### 2. Conectar número WhatsApp
-- En panel Wappfly, escanea QR code
-- Autentica tu número WhatsApp
-- Verifica conexión
-
-### 3. Obtener Token
-- En settings → API Keys
-- Copiar "Bearer Token"
-- Guardar en `.env`:
-  ```
-  WAPPFLY_TOKEN=tu-token-copiado
-  ```
-
-### 4. Configurar Webhook
-- En panel Wappfly → Webhooks
-- **URL:** `https://tu-render-url.onrender.com/webhooks/whatsapp`
-  (O `http://localhost:3001/webhooks/whatsapp` en desarrollo)
-- **Eventos:** Seleccionar `message` (mensajes entrantes)
-- **Save**
-
-### 5. Test local con ngrok
-```bash
-# Terminal 1 - backend
-npm start
-
-# Terminal 2 - ngrok
-ngrok http 3001
-
-# Copy forwarding URL: https://xxxxx-xx-xxx-xxx-xx.ngrok.io
-# Usar esa URL en Wappfly webhook: https://xxxxx-xx-xxx-xxx-xx.ngrok.io/webhooks/whatsapp
-```
-
-## Deploy (Railway)
-
-```bash
-# 1. Conectar Railway
-railway link
-
-# 2. Agregar variables entorno
-railway variables
-
-# 3. Deploy
-railway up
-```
-
-## Logs
-
-```bash
-# Ver logs backend
-tail -f data/app.log
-
-# Ver logs React
-npm run dev (en otro terminal)
-```
-
-## TODO
-
-- [ ] Implementar CAE real con Afip SDK
-- [ ] Setup Mercado Pago suscripciones
-- [ ] Transcripción audio (Groq)
-- [ ] Descargar PDF desde panel
-- [ ] Exportar facturas (Excel/CSV)
-- [ ] Reportes mensuales
-- [ ] Email con factura
-- [ ] Soporte multi-empresa
-- [ ] Afip WebService integrado
 
 ## Licencia
 
@@ -297,4 +170,3 @@ Privado - Carlos Federico Gunther
 ## Contacto
 
 Email: cf.gunther@gmail.com
-# Force redeploy Wed Jul  1 20:09:37 -03 2026

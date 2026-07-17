@@ -173,46 +173,51 @@ Valida que sea una clave fiscal AFIP válida (generalmente 8+ caracteres, alfanu
   }
 }
 
+// Extrae nombre/documento + items[] (concepto+importe por línea) de texto libre.
+// Soporta 1 o varios servicios/productos en el mismo mensaje.
 async function groqExtraerFacturaCompleta(transcripcion, datosActuales) {
   try {
     const Groq = (await import('groq-sdk')).default;
     const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-    const prompt = `TAREA: Extraer TODOS los datos de factura del siguiente texto.
+    const prompt = `TAREA: Extraer datos de factura del siguiente texto. Puede haber UNO o VARIOS
+servicios/productos, cada uno con su propio importe.
 Texto: "${transcripcion}"
 
 CAMPOS a buscar:
 - nombre: nombre del cliente (ej: "Juan García", "Empresa XYZ")
 - documento: número de ID (ej: "20-12345678-9" = CUIT, "12345678" = DNI, "CF" = consumidor final)
-- concepto: descripción del servicio/producto (ej: "diseño de remeras", "consultoría")
-- importe: cantidad de dinero (ej: "1000", "2500", "$1500", "500 pesos")
+- items: array de {concepto, importe} — un objeto POR CADA servicio/producto mencionado,
+  con su descripción y su monto en pesos (sin $, sin "pesos")
 
 EJEMPLOS:
 Input: "tamara troche, por el servicio de diseño de remeras $1000"
-Output: {"nombre": "tamara troche", "concepto": "diseño de remeras", "importe": 1000}
+Output: {"nombre": "tamara troche", "items": [{"concepto": "diseño de remeras", "importe": 1000}]}
 
 Input: "Juan García, documento 12345678, servicio de consultoría, $5000"
-Output: {"nombre": "Juan García", "documento": "12345678", "concepto": "consultoría", "importe": 5000}
+Output: {"nombre": "Juan García", "documento": "12345678", "items": [{"concepto": "consultoría", "importe": 5000}]}
+
+Input: "Facturale a Pedro: diseño de logo 5000, hosting anual 2000, dominio 1000"
+Output: {"nombre": "Pedro", "items": [{"concepto": "diseño de logo", "importe": 5000}, {"concepto": "hosting anual", "importe": 2000}, {"concepto": "dominio", "importe": 1000}]}
 
 INSTRUCCIONES:
 1. Extrae CUALQUIER cosa que pueda ser un campo
 2. Normaliza números (quita $, pesos, guiones innecesarios)
-3. Si hay múltiples palabras juntas que parecen ser datos, sepáralos bien
+3. Cada concepto va con SU PROPIO importe, no los mezcles
 4. Devuelve SOLO JSON válido, sin explicaciones
 
 Responde SOLO con JSON (sin markdown, sin comillas extras):
 {
   "nombre": "...",
   "documento": "...",
-  "concepto": "...",
-  "importe": número
+  "items": [{"concepto": "...", "importe": número}]
 }
 
 Omite campos que NO tengas. Si no extraes nada, devuelve {}.`;
 
     const msg = await groq.chat.completions.create({
       model: 'llama-3.3-70b-versatile',
-      max_tokens: 300,
+      max_tokens: 400,
       messages: [{ role: 'user', content: prompt }],
     });
 
@@ -224,6 +229,20 @@ Omite campos que NO tengas. Si no extraes nada, devuelve {}.`;
     }
 
     const resultado = JSON.parse(jsonMatch[0]);
+
+    // Derivar concepto (join) e importe (suma) — compat con código que lee campos únicos
+    if (Array.isArray(resultado.items) && resultado.items.length > 0) {
+      resultado.items = resultado.items
+        .filter(i => i && i.concepto && !isNaN(parseFloat(i.importe)))
+        .map(i => ({ concepto: String(i.concepto).trim(), importe: parseFloat(i.importe) }));
+      if (resultado.items.length > 0) {
+        resultado.concepto = resultado.items.map(i => i.concepto).join(' + ');
+        resultado.importe = resultado.items.reduce((sum, i) => sum + i.importe, 0);
+      } else {
+        delete resultado.items;
+      }
+    }
+
     logger.info(`[GROQ EXTRACCIÓN] Input: "${transcripcion}" → Output: ${JSON.stringify(resultado)}`);
     return resultado;
   } catch (error) {
@@ -584,7 +603,7 @@ export async function procesarFacturaTexto(
       const extraccion = await groqExtraerFacturaCompleta(texto, datosActuales);
 
       // Mapear campos extraídos a nombres del sistema
-      const mapeo = { nombre: 'razon_social_cliente', documento: 'documento_cliente', concepto: 'concepto', importe: 'importe' };
+      const mapeo = { nombre: 'razon_social_cliente', documento: 'documento_cliente', concepto: 'concepto', importe: 'importe', items: 'items' };
       for (const [key, value] of Object.entries(extraccion)) {
         const campoSistema = mapeo[key];
         if (campoSistema && value) {
@@ -703,17 +722,22 @@ export async function procesarFacturaTexto(
         // Emitir factura
         try {
           const ahora = Math.floor(Date.now() / 1000);
+          const puntoVenta = datosActuales.punto_venta || usuario.punto_venta || 1;
 
-          // Armar datos para PDF + CAE
+          // Ítems: multi-línea si vino de Groq, si no, un único ítem legacy (concepto/importe)
+          const items = (Array.isArray(datosActuales.items) && datosActuales.items.length > 0)
+            ? datosActuales.items
+            : [{ concepto: datosActuales.concepto, importe: parseFloat(datosActuales.importe) }];
+
           const datosFactura = {
-            numero_factura: `${datosActuales.punto_venta || 1}-${Math.floor(Math.random() * 100000)}`,
             fecha_emision: new Date().toISOString().split('T')[0],
             tipo_comprobante: 'Factura C',
             razon_social_cliente: datosActuales.razon_social_cliente,
             documento_cliente: datosActuales.documento_cliente || 'CF',
             concepto: datosActuales.concepto,
             importe: datosActuales.importe,
-            punto_venta: datosActuales.punto_venta || usuario.punto_venta || 1,
+            items,
+            punto_venta: puntoVenta,
             // Datos AFIP
             cuit: usuario.cuit,
             condicion_iva_cliente: 5, // 5=Consumidor Final (por defecto)
@@ -721,7 +745,36 @@ export async function procesarFacturaTexto(
             entorno: process.env.AFIPSDK_ENTORNO || 'homologacion',
           };
 
-          // Generar PDF
+          // Solicitar CAE a AFIP PRIMERO — el número real de comprobante lo asigna AFIP,
+          // no lo inventamos nosotros (antes se generaba un número random acá).
+          let cae = 'PENDIENTE';
+          let vencimientoCae = '';
+          let numeroComprobante = null;
+          try {
+            const respCAE = await solicitarCAE(datosFactura);
+            cae = respCAE?.cae || 'PENDIENTE';
+            vencimientoCae = respCAE?.vencimiento_cae || '';
+            numeroComprobante = respCAE?.numero_comprobante || null;
+          } catch (caeError) {
+            logearError(caeError, 'solicitarCAE');
+            // En homologación: generar CAE test (sin número real de AFIP disponible)
+            const isHomologacion = !datosFactura.entorno || datosFactura.entorno === 'homologacion';
+            if (isHomologacion) {
+              const fechaHoy = new Date();
+              const vencimiento = new Date(fechaHoy.getTime() + 20 * 24 * 60 * 60 * 1000); // 20 días
+              cae = `TEST-${Math.random().toString(36).substring(2, 11).toUpperCase()}`;
+              vencimientoCae = vencimiento.toISOString().split('T')[0];
+              logger.info(`🧪 CAE mock generado para homologación: ${cae}`);
+            }
+          }
+
+          // Número de factura: real de AFIP si lo tenemos, si no un placeholder de homologación
+          const numeroFactura = numeroComprobante
+            ? `${String(puntoVenta).padStart(5, '0')}-${String(numeroComprobante).padStart(8, '0')}`
+            : `${String(puntoVenta).padStart(5, '0')}-TEST`;
+          datosFactura.numero_factura = numeroFactura;
+
+          // Generar PDF con CAE y número YA reales (no un placeholder que después queda desactualizado)
           let pdfPath;
           try {
             pdfPath = await generarPDFFactura({
@@ -731,30 +784,11 @@ export async function procesarFacturaTexto(
               cuit_emisor: usuario.cuit,
               domicilio_emisor: usuario.domicilio,
               condicion_iva: usuario.condicion_iva,
-              cae: 'PENDIENTE',
+              cae,
+              vencimiento_cae: vencimientoCae,
             });
           } catch (pdfError) {
             logger.warn(`PDF falla: ${pdfError.message}`);
-          }
-
-          // Solicitar CAE a AFIP
-          let cae = 'PENDIENTE';
-          let vencimientoCae = '';
-          try {
-            const respCAE = await solicitarCAE(datosFactura);
-            cae = respCAE?.cae || 'PENDIENTE';
-            vencimientoCae = respCAE?.vencimiento_cae || '';
-          } catch (caeError) {
-            logearError(caeError, 'solicitarCAE');
-            // En homologación: generar CAE test
-            const isHomologacion = !datosFactura.entorno || datosFactura.entorno === 'homologacion';
-            if (isHomologacion) {
-              const fechaHoy = new Date();
-              const vencimiento = new Date(fechaHoy.getTime() + 20 * 24 * 60 * 60 * 1000); // 20 días
-              cae = `TEST-${Math.random().toString(36).substring(2, 11).toUpperCase()}`;
-              vencimientoCae = vencimiento.toISOString().split('T')[0];
-              logger.info(`🧪 CAE mock generado para homologación: ${cae}`);
-            }
           }
 
           // Guardar factura en BD
@@ -768,6 +802,7 @@ export async function procesarFacturaTexto(
             documento_cliente: datosFactura.documento_cliente,
             concepto: datosFactura.concepto,
             importe: datosFactura.importe,
+            items,
             cae,
             vencimiento_cae: vencimientoCae,
             pdf_path: pdfPath || '',

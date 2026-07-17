@@ -233,15 +233,27 @@ const IMPORTE_INVALIDO = `❌ El importe no es válido.
 Escribí solo números, sin puntos ni $.
 Ejemplo: 15000`;
 
-const resumenFactura = (datos) => `🧾 Resumen de la factura:
+const resumenFactura = (datos) => {
+  const items = Array.isArray(datos.items) && datos.items.length > 0
+    ? datos.items
+    : [{ concepto: datos.concepto, importe: datos.importe }];
+
+  const lineasItems = items.length > 1
+    ? items.map(i => `  - ${i.concepto}: $${i.importe}`).join('\n')
+    : `• Concepto: ${items[0].concepto}`;
+
+  const total = items.reduce((sum, i) => sum + (parseFloat(i.importe) || 0), 0);
+
+  return `🧾 Resumen de la factura:
 
 • Tipo: ${datos.tipo_comprobante}
 • Cliente: ${datos.razon_social_cliente}
 • Documento: ${datos.documento_cliente}
-• Concepto: ${datos.concepto}
-• Importe: $${datos.importe}
+${lineasItems}
+• Total: $${total}
 
 ¿Confirmás la emisión? (SI / NO)`;
+};
 
 const EMITIENDO_FACTURA = `⏳ Emitiendo tu factura...
 

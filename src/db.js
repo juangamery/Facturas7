@@ -101,7 +101,7 @@ export async function obtenerUltimaFactura(usuarioID) {
 
 export async function crearFactura(usuarioID, datos) {
   const ahora = Math.floor(Date.now() / 1000);
-  const { data } = await getDB()
+  const { data, error } = await getDB()
     .from('facturas')
     .insert({
       usuario_id: usuarioID,
@@ -113,6 +113,7 @@ export async function crearFactura(usuarioID, datos) {
       documento_cliente: datos.documento_cliente,
       concepto: datos.concepto,
       importe: datos.importe,
+      items: datos.items || null,
       cae: datos.cae,
       vencimiento_cae: datos.vencimiento_cae,
       pdf_path: datos.pdf_path || null,
@@ -121,6 +122,10 @@ export async function crearFactura(usuarioID, datos) {
     })
     .select()
     .single();
+  if (error) {
+    logger.error(`crearFactura(${usuarioID}) falla: ${error.message}`);
+    throw new Error(`No pude guardar la factura: ${error.message}`);
+  }
   return data;
 }
 

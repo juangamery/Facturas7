@@ -227,7 +227,7 @@ async function procesarImagenGenerico(numeroDeTelefono, imagenID, usuario) {
 
 async function procesarAudioGenerico(numeroDeTelefono, audioID, usuario) {
   try {
-    // Descargar audio desde Wappfly y guardar path
+    // Descargar audio desde Meta y guardar path
     const { descargarMediaDeTelefono } = await import('../whatsapp/media.js');
     const audioPath = await descargarMediaDeTelefono(audioID);
 
