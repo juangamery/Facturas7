@@ -157,8 +157,11 @@ async function procesarTextoGenerico(numeroDeTelefono, texto, usuario) {
       const intencion = detectarIntencion(texto);
 
       if (intencion === 'FACTURA') {
+        // No solo detectar intención: el mensaje puede traer todos los datos
+        // ya (nombre, concepto, importe). Delegar a procesarFacturaTexto,
+        // que ya sabe extraer todo de una vez antes de preguntar de nuevo.
         await siguientePaso(numeroDeTelefono, PASOS.FACTURA_NOMBRE_CLIENTE);
-        await enviarTexto(numeroDeTelefono, PLANTILLAS.PEDIR_NOMBRE_CLIENTE);
+        await procesarFacturaTexto(numeroDeTelefono, texto, PASOS.FACTURA_NOMBRE_CLIENTE, {}, usuario);
         return;
       }
 

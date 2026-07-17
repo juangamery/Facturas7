@@ -311,6 +311,20 @@ function obtenerCamposFaltantes(datos) {
   return faltantes;
 }
 
+// Traduce las claves que devuelve Groq (nombre, documento) a las claves que
+// usa el sistema (razon_social_cliente, documento_cliente). Sin esto,
+// obtenerCamposFaltantes nunca ve el nombre/documento aunque Groq sí los
+// haya extraído, y el bot vuelve a preguntar algo que el usuario ya dijo.
+function mapearExtraccionAFactura(extraccion) {
+  const mapeo = { nombre: 'razon_social_cliente', documento: 'documento_cliente', concepto: 'concepto', importe: 'importe', items: 'items' };
+  const datos = {};
+  for (const [campo, valor] of Object.entries(extraccion)) {
+    const campoSistema = mapeo[campo];
+    if (campoSistema && valor) datos[campoSistema] = valor;
+  }
+  return datos;
+}
+
 // ==========================================
 // FUNCIONES BÁSICAS DE CONVERSACIÓN
 // ==========================================
@@ -1185,8 +1199,28 @@ export async function procesarAudioConversacional(
       const intencion = detectarIntencion(transcripcion);
 
       if (intencion === 'FACTURA') {
-        await siguientePaso(numeroDeTelefono, PASOS.FACTURA_NOMBRE_CLIENTE);
-        await enviarTexto(numeroDeTelefono, PLANTILLAS.PEDIR_NOMBRE_CLIENTE);
+        // No solo detectar intención: la transcripción puede traer TODOS los
+        // datos ya (nombre, concepto, importe). Intentar extraerlos antes de
+        // preguntar de nuevo lo que el usuario ya dijo.
+        const extraccion = await groqExtraerFacturaCompleta(transcripcion, {});
+        const datos = mapearExtraccionAFactura(extraccion);
+        for (const [campo, valor] of Object.entries(datos)) {
+          await guardarDato(numeroDeTelefono, campo, valor);
+        }
+        const faltantes = obtenerCamposFaltantes(datos);
+
+        if (faltantes.length === 0) {
+          await siguientePaso(numeroDeTelefono, PASOS.FACTURA_CONFIRMACION, datos);
+          await enviarTexto(
+            numeroDeTelefono,
+            PLANTILLAS.resumenFactura({ tipo_comprobante: 'Factura C', ...datos })
+          );
+        } else {
+          const proximoPaso = PASOS[`FACTURA_${faltantes[0].toUpperCase()}`];
+          const pregunta = PLANTILLAS[`PEDIR_${faltantes[0].toUpperCase()}`];
+          await siguientePaso(numeroDeTelefono, proximoPaso, datos);
+          await enviarTexto(numeroDeTelefono, pregunta);
+        }
         return;
       }
 
@@ -1214,13 +1248,12 @@ export async function procesarAudioConversacional(
     ) {
       // Groq extrae TODOS los campos de la transcripción
       const extraccion = await groqExtraerFacturaCompleta(transcripcion, datosActuales);
+      const mapeado = mapearExtraccionAFactura(extraccion);
+      for (const [campo, valor] of Object.entries(mapeado)) {
+        await guardarDato(numeroDeTelefono, campo, valor);
+      }
 
-      if (extraccion.nombre) await guardarDato(numeroDeTelefono, 'razon_social_cliente', extraccion.nombre);
-      if (extraccion.documento) await guardarDato(numeroDeTelefono, 'documento_cliente', extraccion.documento);
-      if (extraccion.concepto) await guardarDato(numeroDeTelefono, 'concepto', extraccion.concepto);
-      if (extraccion.importe) await guardarDato(numeroDeTelefono, 'importe', extraccion.importe);
-
-      const datos = { ...datosActuales, ...extraccion };
+      const datos = { ...datosActuales, ...mapeado };
       const faltantes = obtenerCamposFaltantes(datos);
 
       if (faltantes.length === 0) {
