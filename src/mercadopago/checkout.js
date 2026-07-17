@@ -117,10 +117,25 @@ export async function procesarCheckout(req, res) {
       return res.status(502).json({ exito: false, error: 'Mercado Pago rechazó la operación' });
     }
 
-    await actualizarUsuario(usuario.id, { mp_subscription_id: resultado.id });
+    const datosUsuario = { mp_subscription_id: resultado.id };
+
+    // No dependemos solo del webhook para la activación inicial: si MP ya
+    // nos confirmó 'authorized' en la respuesta de creación, activamos acá
+    // mismo. El webhook queda para cambios posteriores (cobro recurrente
+    // fallido, cancelación) — necesario porque webhooks se configuran por
+    // aplicación en MP, y no todas las apps (ej. cuentas de prueba) los
+    // tienen habilitados por igual.
+    if (resultado.status === 'authorized') {
+      const TREINTA_DIAS = 30 * 24 * 60 * 60;
+      datosUsuario.activo = 1;
+      datosUsuario.plan = 'basico';
+      datosUsuario.estado_registro = 'pago_ok';
+      datosUsuario.fecha_vencimiento = Math.floor(Date.now() / 1000) + TREINTA_DIAS;
+    }
+
+    await actualizarUsuario(usuario.id, datosUsuario);
     logger.info(`💳 Checkout completado para usuario ${usuario.id}, suscripción ${resultado.id} (${resultado.status})`);
 
-    // El webhook de MP confirma el estado final (authorized) y activa al usuario.
     res.json({ exito: true, status: resultado.status });
   } catch (error) {
     logearError(error, 'procesarCheckout');
