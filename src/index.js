@@ -23,6 +23,7 @@ import { logger } from './logger.js';
 import webhookWhatsApp, { iniciarPolling } from './bot/webhook.js';
 import adminRoutes from './admin/routes.js';
 import { handleMercadoPagoWebhook } from './mercadopago/webhook.js';
+import { mostrarCheckout, procesarCheckout } from './mercadopago/checkout.js';
 import { inicializarMailer } from './email/mailer.js';
 import { inicializarReceiver } from './email/receiver.js';
 
@@ -64,6 +65,10 @@ app.post('/webhooks/whatsapp', webhookWhatsApp);
 // Webhook de Mercado Pago (POST /webhooks/mercadopago)
 // MP manda acá eventos de pagos aprobados, rechazados, etc
 app.post('/webhooks/mercadopago', handleMercadoPagoWebhook);
+
+// Checkout de suscripción (Checkout Bricks) — el bot manda este link
+app.get('/checkout/:usuarioId', mostrarCheckout);
+app.post('/checkout/:usuarioId/procesar', procesarCheckout);
 
 // Panel admin (todas las rutas /admin/*)
 // Rutas públicas: /admin/login, /admin/info

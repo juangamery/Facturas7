@@ -1,7 +1,13 @@
 // ==========================================
 // MERCADO PAGO - Suscripciones (preapproval)
 // ==========================================
-// Crea una suscripción mensual por usuario y devuelve el link de pago.
+// La creación de preapproval SIN card_token_id ("solo link, pago pendiente")
+// da 500 en la API real de MP incluso siguiendo su doc al pie de la letra
+// (confirmado probando contra su API, cuenta activada, con y sin plan).
+// El único camino que responde con validaciones limpias es el que requiere
+// card_token_id — por eso el flujo real es: mandamos un link a nuestra
+// propia página de checkout (Checkout Bricks), el cliente tokeniza su
+// tarjeta ahí, y RECIÉN con ese token creamos la suscripción acá.
 // Usa external_reference = id del usuario, para matchear en el webhook.
 
 import axios from 'axios';
@@ -15,24 +21,29 @@ function headers() {
   return { Authorization: `Bearer ${MP_TOKEN}`, 'Content-Type': 'application/json' };
 }
 
-// Crea la suscripción mensual del usuario. Devuelve { id, init_point } o null.
-export async function crearSuscripcion(usuario) {
+// Link a nuestra página de checkout propia (no llama a MP todavía).
+export function generarLinkCheckout(usuario) {
+  const base = process.env.BASE_URL || 'https://facturas7.onrender.com';
+  return `${base}/checkout/${usuario.id}`;
+}
+
+// Crea la suscripción YA con la tarjeta tokenizada (después de Checkout Bricks).
+// Devuelve { id, status } o null.
+export async function crearSuscripcionConTarjeta(usuario, cardTokenId, payerEmail) {
   try {
     if (!MP_TOKEN) {
       logger.warn('MP_ACCESS_TOKEN no configurado, no puedo crear suscripción');
       return null;
     }
 
-    // end_date es obligatorio para MP en este modelo (suscripción sin plan,
-    // pago pendiente). Sin él, MP devuelve 500 genérico en vez de un 400
-    // claro — lo confirmé probando contra su API real. 5 años = "sin límite" práctico.
     const finRecurrencia = new Date();
     finRecurrencia.setFullYear(finRecurrencia.getFullYear() + 5);
 
     const body = {
       reason: 'Facturas7 - Suscripción mensual',
       external_reference: String(usuario.id),
-      payer_email: usuario.email || undefined,
+      payer_email: payerEmail,
+      card_token_id: cardTokenId,
       auto_recurring: {
         frequency: 1,
         frequency_type: 'months',
@@ -41,14 +52,14 @@ export async function crearSuscripcion(usuario) {
         currency_id: 'ARS',
       },
       back_url: `${process.env.BASE_URL || 'https://facturas7.onrender.com'}/admin/dashboard`,
-      status: 'pending',
+      status: 'authorized',
     };
 
     const { data } = await axios.post(`${MP_API}/preapproval`, body, { headers: headers() });
-    logger.info(`💳 Suscripción MP creada ${data.id} para usuario ${usuario.id}`);
-    return { id: data.id, init_point: data.init_point };
+    logger.info(`💳 Suscripción MP creada ${data.id} (${data.status}) para usuario ${usuario.id}`);
+    return { id: data.id, status: data.status };
   } catch (error) {
-    logearError(error, 'crearSuscripcion MP');
+    logearError(error, 'crearSuscripcionConTarjeta MP');
     logger.error(`MP respuesta: ${JSON.stringify(error.response?.data || {})}`);
     return null;
   }

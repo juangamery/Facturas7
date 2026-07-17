@@ -15,7 +15,7 @@ import {
 import { obtenerUsuario, crearUsuario, actualizarUsuario } from '../db.js';
 import { enviarTexto } from '../whatsapp/mensajes.js';
 import * as PLANTILLAS from '../whatsapp/plantillas.js';
-import { crearSuscripcion } from '../mercadopago/suscripcion.js';
+import { generarLinkCheckout } from '../mercadopago/suscripcion.js';
 import { logger } from '../logger.js';
 import Groq from 'groq-sdk';
 
@@ -327,16 +327,14 @@ async function procesarPreSetupARCA(numeroDeTelefono, usuario, cuit, claveFiscal
 }
 
 async function enviarLinkPago(numeroDeTelefono, usuario, trial) {
-  const sub = await crearSuscripcion(usuario);
-  if (!sub) {
-    await enviarTexto(numeroDeTelefono, 'No pude generar el link de pago ahora. Reintentá en un rato 🙏');
-    return;
-  }
+  // No llama a MP todavía — el link es a nuestra propia página de checkout
+  // (Checkout Bricks). La suscripción real se crea recién cuando el
+  // cliente tokeniza su tarjeta ahí (ver mercadopago/checkout.js).
+  const linkCheckout = generarLinkCheckout(usuario);
   await actualizarUsuario(usuario.id, {
-    mp_subscription_id: sub.id,
     estado_registro: trial ? 'trial' : 'esperando_pago',
   });
-  logger.info(`💳 Link de pago enviado a usuario ${usuario.id}`);
+  logger.info(`💳 Link de checkout enviado a usuario ${usuario.id}`);
 
   // Calcular fecha vencimiento (7 días desde hoy)
   const ahora = new Date();
@@ -345,8 +343,8 @@ async function enviarLinkPago(numeroDeTelefono, usuario, trial) {
 
   if (trial) {
     await enviarTexto(numeroDeTelefono,
-      `🎉 Trial activado por 7 días. Vence el ${fechaFormato}.\n\nLink para renovar cuando quieras:\n${sub.init_point}`);
+      `🎉 Trial activado por 7 días. Vence el ${fechaFormato}.\n\nLink para suscribirte cuando quieras:\n${linkCheckout}`);
   } else {
-    await enviarTexto(numeroDeTelefono, PLANTILLAS.avisoVencimiento(fechaFormato, sub.init_point));
+    await enviarTexto(numeroDeTelefono, PLANTILLAS.avisoVencimiento(fechaFormato, linkCheckout));
   }
 }
