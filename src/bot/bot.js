@@ -223,8 +223,8 @@ async function procesarImagenGenerico(numeroDeTelefono, imagenID, usuario) {
       return;
     }
 
-    // Preferencia: Gemini Vision > Claude Vision
-    if (process.env.GOOGLE_API_KEY) {
+    // Preferencia: Groq Vision (mismo key que texto/audio) > Claude Vision
+    if (process.env.GROQ_API_KEY) {
       const { procesarImagenFactura } = await import('../flujos/imagen_vision.js');
       await procesarImagenFactura(numeroDeTelefono, imagenPath, usuario);
     } else if (process.env.ANTHROPIC_API_KEY) {

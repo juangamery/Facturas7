@@ -1,9 +1,13 @@
 // ==========================================
-// PROCESAMIENTO DE IMÁGENES CON GEMINI VISION
+// PROCESAMIENTO DE IMÁGENES CON GROQ VISION
 // ==========================================
 // Extrae datos de factura de imágenes (fotos de recibos, facturas, etc)
+// Antes usaba Gemini, pero Google retiró 2 modelos seguidos bajo nosotros
+// (1.5-flash y 2.5-flash) y encima el free tier tiene cuota muy baja.
+// Groq ya se usa para texto/audio en este bot (misma API key) y tiene
+// visión con cuota más generosa en el free tier.
 
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import Groq from 'groq-sdk';
 import { logger, logearError } from '../logger.js';
 import { enviarTexto } from '../whatsapp/mensajes.js';
 import * as PLANTILLAS from '../whatsapp/plantillas.js';
@@ -11,7 +15,7 @@ import { siguientePaso, guardarDato, obtenerEstado, PASOS, obtenerDato } from '.
 import fs from 'fs';
 import path from 'path';
 
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 export async function procesarImagenFactura(numeroDeTelefono, imagenPath, usuario) {
   try {
@@ -28,20 +32,13 @@ export async function procesarImagenFactura(numeroDeTelefono, imagenPath, usuari
     const ext = path.extname(imagenPath).toLowerCase();
     const mimeType = ext === '.png' ? 'image/png' : 'image/jpeg';
 
-    // Enviar a Gemini Vision
-    // gemini-1.5-flash y luego gemini-2.5-flash fueron retirados por Google
-    // uno tras otro (confirmado en logs: 404 "not found" y después "no
-    // longer available to new users"). Usamos el alias 'gemini-flash-latest'
-    // que Google mantiene apuntando siempre al modelo flash vigente, para
-    // no perseguir esto de nuevo cada vez que deprecan una versión puntual.
-    const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
     const prompt = `Analiza esta imagen de comprobante/factura/recibo y extrae:
 - nombre_cliente: nombre de quien recibe la factura
 - documento: CUIT, DNI, o CF (consumidor final)
 - concepto: qué es (ej: servicios, productos, etc)
 - importe: monto numérico sin símbolo
 
-Devuelve JSON válido:
+Devuelve SOLO JSON válido (sin markdown, sin texto extra):
 {
   "nombre_cliente": "...",
   "documento": "...",
@@ -49,20 +46,25 @@ Devuelve JSON válido:
   "importe": 0
 }
 
-Si algo no está claro, pon null. Sé preciso.`;
+Si algo no está claro, omitilo. Sé preciso.`;
 
-    const response = await model.generateContent([
-      {
-        inlineData: {
-          data: imagenBase64,
-          mimeType: mimeType,
+    const completion = await groq.chat.completions.create({
+      model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            { type: 'image_url', image_url: { url: `data:${mimeType};base64,${imagenBase64}` } },
+          ],
         },
-      },
-      prompt,
-    ]);
+      ],
+      temperature: 0.2,
+      max_completion_tokens: 500,
+    });
 
-    const textoRespuesta = response.response.text();
-    logger.info(`📸 [GEMINI] Respuesta: ${textoRespuesta.substring(0, 200)}`);
+    const textoRespuesta = completion.choices[0]?.message?.content || '';
+    logger.info(`📸 [GROQ VISION] Respuesta: ${textoRespuesta.substring(0, 200)}`);
 
     // Parsear JSON
     const jsonMatch = textoRespuesta.match(/\{[\s\S]*\}/);
