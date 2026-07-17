@@ -99,6 +99,15 @@ export async function obtenerUltimaFactura(usuarioID) {
   return data;
 }
 
+export async function obtenerFacturaPorID(facturaID) {
+  const { data } = await getDB()
+    .from('facturas')
+    .select('*')
+    .eq('id', facturaID)
+    .single();
+  return data;
+}
+
 export async function crearFactura(usuarioID, datos) {
   const ahora = Math.floor(Date.now() / 1000);
   const { data, error } = await getDB()

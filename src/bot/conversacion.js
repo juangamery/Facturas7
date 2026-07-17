@@ -11,6 +11,8 @@ import {
   obtenerUsuario,
   actualizarUsuario,
   obtenerFacturasDeUsuario,
+  obtenerUltimaFactura,
+  obtenerFacturaPorID,
   getDB,
 } from '../db.js';
 import { logger, logearError } from '../logger.js';
@@ -18,7 +20,7 @@ import * as PLANTILLAS from '../whatsapp/plantillas.js';
 import { enviarTexto } from '../whatsapp/mensajes.js';
 import { validarCUIT } from '../facturacion/validaciones.js';
 import { generarPDFFactura } from '../facturacion/pdf.js';
-import { solicitarCAE } from '../facturacion/factura.js';
+import { solicitarCAE, emitirNotaCredito } from '../facturacion/factura.js';
 
 // ==========================================
 // PASOS / ESTADOS DE LA CONVERSACIÓN
@@ -60,6 +62,9 @@ export const PASOS = {
 
   // Ver mis datos
   VER_MIS_DATOS: 'ver_mis_datos',
+
+  // Nota de crédito (anular factura)
+  NOTA_CREDITO_CONFIRMACION: 'nota_credito_confirmacion',
 };
 
 // ==========================================
@@ -356,22 +361,28 @@ export async function limpiarConversacion(numeroDeTelefono) {
 // ==========================================
 
 // Detecta qué quiere hacer el usuario basándose en palabras clave
+// Match de palabra completa (no substring) — algunas listas tienen dígitos
+// sueltos ('1','2'...) que con .includes() matchean cualquier texto que
+// los contenga (ej: "tengo 15 años" → FACTURA por el '1').
 export function detectarIntencion(texto) {
   const t = texto.toLowerCase().trim();
 
-  if (PLANTILLAS.PALABRAS_FACTURA.some((p) => t.includes(p))) {
+  if (contienePalabraExacta(t, PLANTILLAS.PALABRAS_FACTURA)) {
     return 'FACTURA';
   }
-  if (PLANTILLAS.PALABRAS_ULTIMA.some((p) => t.includes(p))) {
+  if (contienePalabraExacta(t, PLANTILLAS.PALABRAS_ULTIMA)) {
     return 'ULTIMA_FACTURA';
   }
-  if (PLANTILLAS.PALABRAS_DATOS.some((p) => t.includes(p))) {
+  if (contienePalabraExacta(t, PLANTILLAS.PALABRAS_DATOS)) {
     return 'MIS_DATOS';
   }
-  if (PLANTILLAS.PALABRAS_CANCELAR.some((p) => t.includes(p))) {
+  if (contienePalabraExacta(t, PLANTILLAS.PALABRAS_NOTA_CREDITO)) {
+    return 'NOTA_CREDITO';
+  }
+  if (contienePalabraExacta(t, PLANTILLAS.PALABRAS_CANCELAR)) {
     return 'CANCELAR';
   }
-  if (PLANTILLAS.PALABRAS_MENU.some((p) => t.includes(p))) {
+  if (contienePalabraExacta(t, PLANTILLAS.PALABRAS_MENU)) {
     return 'MENU';
   }
 
@@ -906,6 +917,170 @@ export async function verMisDatos(numeroDeTelefono, usuario) {
     await limpiarConversacion(numeroDeTelefono);
   } catch (error) {
     logger.error(`[MIS_DATOS] Error: ${error.message}`);
+    await enviarTexto(numeroDeTelefono, PLANTILLAS.ERROR_GENERAL);
+  }
+}
+
+// ==========================================
+// NOTA DE CRÉDITO — anular la última factura
+// ==========================================
+
+export async function iniciarNotaCredito(numeroDeTelefono, usuario) {
+  try {
+    const ultima = await obtenerUltimaFactura(usuario.id);
+    if (!ultima) {
+      await enviarTexto(numeroDeTelefono, '📋 No tenés facturas emitidas para anular.');
+      await mostrarMenuPrincipal(numeroDeTelefono, usuario);
+      return;
+    }
+    if (String(ultima.tipo_comprobante || '').startsWith('Nota de Crédito')) {
+      await enviarTexto(numeroDeTelefono, '⚠️ Tu última operación ya es una Nota de Crédito. No se puede anular otra Nota de Crédito.');
+      await mostrarMenuPrincipal(numeroDeTelefono, usuario);
+      return;
+    }
+
+    await siguientePaso(numeroDeTelefono, PASOS.NOTA_CREDITO_CONFIRMACION, { factura_id: ultima.id });
+    await enviarTexto(
+      numeroDeTelefono,
+      `📋 Vas a anular esta factura con una Nota de Crédito:\n\n` +
+      `• N°: ${ultima.numero_factura}\n` +
+      `• Cliente: ${ultima.razon_social_cliente}\n` +
+      `• Concepto: ${ultima.concepto}\n` +
+      `• Importe: $${ultima.importe}\n\n` +
+      `¿Confirmás? (SI / NO)`
+    );
+  } catch (error) {
+    logger.error(`[NOTA_CREDITO] iniciarNotaCredito falla: ${error.message}`);
+    await enviarTexto(numeroDeTelefono, PLANTILLAS.ERROR_GENERAL);
+  }
+}
+
+export async function procesarNotaCredito(numeroDeTelefono, texto, datosActuales, usuario) {
+  try {
+    if (esConfirmacionSI(texto)) {
+      await enviarTexto(numeroDeTelefono, '⏳ Emitiendo Nota de Crédito...');
+
+      const facturaOriginal = await obtenerFacturaPorID(datosActuales.factura_id);
+      if (!facturaOriginal) {
+        await enviarTexto(numeroDeTelefono, '❌ No encontré la factura original. Puede que ya haya sido anulada.');
+        await limpiarConversacion(numeroDeTelefono);
+        await mostrarMenuPrincipal(numeroDeTelefono, usuario);
+        return;
+      }
+
+      const items = (Array.isArray(facturaOriginal.items) && facturaOriginal.items.length > 0)
+        ? facturaOriginal.items
+        : [{ concepto: facturaOriginal.concepto, importe: parseFloat(facturaOriginal.importe) }];
+
+      const [ptoVtaStr, nroStr] = String(facturaOriginal.numero_factura || '').split('-');
+      const ptoVtaOriginal = parseInt(ptoVtaStr, 10) || usuario.punto_venta || 1;
+      const numeroOriginal = parseInt(nroStr, 10) || 0;
+
+      const datosNC = {
+        fecha_emision: new Date().toISOString().split('T')[0],
+        tipo_comprobante: 'Factura C', // usado por emitirNotaCredito para mapear a NC C (13)
+        razon_social_cliente: facturaOriginal.razon_social_cliente,
+        documento_cliente: facturaOriginal.documento_cliente || 'CF',
+        concepto: facturaOriginal.concepto,
+        importe: facturaOriginal.importe,
+        items,
+        punto_venta: usuario.punto_venta || ptoVtaOriginal,
+        cuit: usuario.cuit,
+        condicion_iva_cliente: 5,
+        concepto_afip: 1,
+        entorno: process.env.AFIPSDK_ENTORNO || 'homologacion',
+        comprobanteAsociado: {
+          tipo: 11, // Factura C
+          ptoVta: ptoVtaOriginal,
+          nro: numeroOriginal,
+        },
+      };
+
+      let cae = 'PENDIENTE';
+      let vencimientoCae = '';
+      let numeroComprobante = null;
+      try {
+        const resp = await emitirNotaCredito(datosNC);
+        cae = resp?.cae || 'PENDIENTE';
+        vencimientoCae = resp?.vencimiento_cae || '';
+        numeroComprobante = resp?.numero_comprobante || null;
+      } catch (caeError) {
+        logearError(caeError, 'emitirNotaCredito');
+        const isHomologacion = !datosNC.entorno || datosNC.entorno === 'homologacion';
+        if (isHomologacion) {
+          const vencimiento = new Date(Date.now() + 20 * 24 * 60 * 60 * 1000);
+          cae = `TEST-${Math.random().toString(36).substring(2, 11).toUpperCase()}`;
+          vencimientoCae = vencimiento.toISOString().split('T')[0];
+          logger.info(`🧪 CAE mock (NC) generado para homologación: ${cae}`);
+        }
+      }
+
+      const numeroNC = numeroComprobante
+        ? `${String(datosNC.punto_venta).padStart(5, '0')}-${String(numeroComprobante).padStart(8, '0')}`
+        : `${String(datosNC.punto_venta).padStart(5, '0')}-TEST`;
+      datosNC.numero_factura = numeroNC;
+      datosNC.tipo_comprobante = 'Nota de Crédito C';
+
+      let pdfPath;
+      try {
+        pdfPath = await generarPDFFactura({
+          ...datosNC,
+          domicilio_cliente: '',
+          razon_social_emisor: usuario.razon_social,
+          cuit_emisor: usuario.cuit,
+          domicilio_emisor: usuario.domicilio,
+          condicion_iva: usuario.condicion_iva,
+          cae,
+          vencimiento_cae: vencimientoCae,
+        });
+      } catch (pdfError) {
+        logger.warn(`PDF Nota de Crédito falla: ${pdfError.message}`);
+      }
+
+      await getDB().from('facturas').insert({
+        usuario_id: usuario.id,
+        numero_telefono: numeroDeTelefono,
+        fecha_emision: datosNC.fecha_emision,
+        tipo_comprobante: 'Nota de Crédito C',
+        numero_factura: numeroNC,
+        razon_social_cliente: datosNC.razon_social_cliente,
+        documento_cliente: datosNC.documento_cliente,
+        concepto: datosNC.concepto,
+        importe: datosNC.importe,
+        items,
+        cae,
+        vencimiento_cae: vencimientoCae,
+        pdf_path: pdfPath || '',
+        origen: 'whatsapp',
+        creado_en: Math.floor(Date.now() / 1000),
+        factura_original_id: facturaOriginal.id,
+      });
+
+      await enviarTexto(
+        numeroDeTelefono,
+        `✅ Nota de Crédito emitida.\n\n📄 N°: ${numeroNC}\n🔑 CAE: ${cae}\n\nAnula la factura ${facturaOriginal.numero_factura}.`
+      );
+
+      if (pdfPath) {
+        try {
+          const { enviarDocumento } = await import('../whatsapp/mensajes.js');
+          await enviarDocumento(numeroDeTelefono, pdfPath, `NotaCredito_${numeroNC}.pdf`);
+        } catch (pdfSendError) {
+          logger.warn(`PDF Nota de Crédito no pudo enviarse: ${pdfSendError.message}`);
+        }
+      }
+
+      await limpiarConversacion(numeroDeTelefono);
+      await siguientePaso(numeroDeTelefono, PASOS.MENU_PRINCIPAL);
+    } else if (esConfirmacionNO(texto)) {
+      await limpiarConversacion(numeroDeTelefono);
+      await siguientePaso(numeroDeTelefono, PASOS.MENU_PRINCIPAL);
+      await mostrarMenuPrincipal(numeroDeTelefono, usuario);
+    } else {
+      await enviarTexto(numeroDeTelefono, 'Respondé SI o NO.');
+    }
+  } catch (error) {
+    logger.error(`[NOTA_CREDITO] procesarNotaCredito falla: ${error.message}`);
     await enviarTexto(numeroDeTelefono, PLANTILLAS.ERROR_GENERAL);
   }
 }

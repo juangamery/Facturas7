@@ -21,6 +21,8 @@ import {
   procesarFacturaTexto,
   verUltimaFactura,
   verMisDatos,
+  iniciarNotaCredito,
+  procesarNotaCredito,
   cancelarOperacion,
   procesarAudioConversacional,
   siguientePaso,
@@ -170,8 +172,19 @@ async function procesarTextoGenerico(numeroDeTelefono, texto, usuario) {
         return;
       }
 
+      if (intencion === 'NOTA_CREDITO') {
+        await iniciarNotaCredito(numeroDeTelefono, usuario);
+        return;
+      }
+
       // No entendió
       await mostrarMenuPrincipal(numeroDeTelefono, usuario);
+      return;
+    }
+
+    // NOTA DE CRÉDITO EN PROGRESO (confirmación)
+    if (paso === PASOS.NOTA_CREDITO_CONFIRMACION) {
+      await procesarNotaCredito(numeroDeTelefono, texto, datosActuales, usuario);
       return;
     }
 

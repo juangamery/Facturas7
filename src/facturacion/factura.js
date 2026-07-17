@@ -13,7 +13,9 @@ const EMPRESA_CERT = process.env.AFIP_EMPRESA_CERT;
 const EMPRESA_KEY = process.env.AFIP_EMPRESA_KEY;
 
 // Tipo de comprobante ARCA: 11 = Factura C, 6 = Factura B, 1 = Factura A
+// 13 = Nota de Crédito C, 8 = Nota de Crédito B, 3 = Nota de Crédito A
 const TIPO_COMPROBANTE = { 'Factura C': 11, 'Factura B': 6, 'Factura A': 1 };
+const TIPO_NOTA_CREDITO = { 'Factura C': 13, 'Factura B': 8, 'Factura A': 3 };
 
 // Crea instancia Afip para emitir en nombre de un CUIT (representado).
 // En producción usa el certificado ÚNICO de la empresa (modelo delegación).
@@ -59,65 +61,94 @@ function fechaAfip() {
 }
 
 // ==========================================
-// SOLICITAR CAE — emite el comprobante
+// EMITIR COMPROBANTE (compartido por factura y nota de crédito)
+// ==========================================
+async function _emitirComprobante(datosFactura, cbteTipo, cbtesAsoc = null) {
+  const produccion = datosFactura.entorno === 'produccion';
+  const afip = crearAfip(datosFactura.cuit, produccion);
+  const ptoVta = parseInt(datosFactura.punto_venta, 10) || 1;
+
+  // Último comprobante emitido → siguiente número
+  const ultimo = await afip.ElectronicBilling.getLastVoucher(ptoVta, cbteTipo);
+  const numero = (ultimo || 0) + 1;
+
+  const docTipo = getTipoDocumento(datosFactura.documento_cliente);
+  const docNro = parsearDocumento(datosFactura.documento_cliente);
+  const importe = Math.round(parseFloat(datosFactura.importe) * 100) / 100;
+  const concepto = datosFactura.concepto_afip || 1; // 1=Productos, 2=Servicios, 3=Ambos
+
+  logger.info(`[AFIP DEBUG] ptoVta=${ptoVta}, cbteTipo=${cbteTipo}, docTipo=${docTipo}, docNro=${docNro}, importe=${importe}, concepto=${concepto}`);
+
+  // Factura/NC C monotributo: no discrimina IVA (ImpNeto = ImpTotal)
+  const data = {
+    CantReg: 1,
+    PtoVta: ptoVta,
+    CbteTipo: cbteTipo,
+    Concepto: concepto,
+    DocTipo: docTipo,
+    DocNro: docNro,
+    CbteDesde: numero,
+    CbteHasta: numero,
+    CbteFch: parseInt(fechaAfip(), 10),
+    ImpTotal: importe,
+    ImpTotConc: 0,
+    ImpNeto: importe,
+    ImpOpEx: 0,
+    ImpIVA: 0,
+    ImpTrib: 0,
+    MonId: 'PES',
+    MonCotiz: 1,
+    CondicionIVAReceptorId: parseInt(datosFactura.condicion_iva_cliente || 5, 10), // 5 = Consumidor Final
+  };
+  if (cbtesAsoc) data.CbtesAsoc = cbtesAsoc;
+
+  logger.info(`[AFIP DEBUG] data enviado: ${JSON.stringify(data)}`);
+  const res = await afip.ElectronicBilling.createNextVoucher(data);
+
+  return {
+    cae: res.CAE,
+    vencimiento_cae: res.CAEFchVto,
+    numero_comprobante: res.voucherNumber || numero,
+  };
+}
+
+// ==========================================
+// SOLICITAR CAE — emite una factura
 // ==========================================
 export async function solicitarCAE(datosFactura) {
   try {
     logger.info(`[AFIP DEBUG] Input: cuit=${datosFactura.cuit}, ptoVta=${datosFactura.punto_venta}, tipo=${datosFactura.tipo_comprobante}`);
-
-    const produccion = datosFactura.entorno === 'produccion';
-    const afip = crearAfip(datosFactura.cuit, produccion);
-    const ptoVta = parseInt(datosFactura.punto_venta, 10) || 1;
     const cbteTipo = TIPO_COMPROBANTE[datosFactura.tipoComprobante || datosFactura.tipo_comprobante || 'Factura C'];
-
-    logger.info(`[AFIP DEBUG] ptoVta=${ptoVta}, cbteTipo=${cbteTipo}`);
-
-    // Último comprobante emitido → siguiente número
-    const ultimo = await afip.ElectronicBilling.getLastVoucher(ptoVta, cbteTipo);
-    const numero = (ultimo || 0) + 1;
-
-    const docTipo = getTipoDocumento(datosFactura.documento_cliente);
-    const docNro = parsearDocumento(datosFactura.documento_cliente);
-    const importe = Math.round(parseFloat(datosFactura.importe) * 100) / 100;
-    const concepto = datosFactura.concepto_afip || 1; // 1=Productos, 2=Servicios, 3=Ambos
-
-    logger.info(`[AFIP DEBUG] docTipo=${docTipo}, docNro=${docNro}, importe=${importe}, concepto=${concepto}`);
-
-    // Factura C monotributo: no discrimina IVA (ImpNeto = ImpTotal)
-    const data = {
-      CantReg: 1,
-      PtoVta: ptoVta,
-      CbteTipo: cbteTipo,
-      Concepto: concepto,
-      DocTipo: docTipo,
-      DocNro: docNro,
-      CbteDesde: numero,
-      CbteHasta: numero,
-      CbteFch: parseInt(fechaAfip(), 10),
-      ImpTotal: importe,
-      ImpTotConc: 0,
-      ImpNeto: importe,
-      ImpOpEx: 0,
-      ImpIVA: 0,
-      ImpTrib: 0,
-      MonId: 'PES',
-      MonCotiz: 1,
-      CondicionIVAReceptorId: parseInt(datosFactura.condicion_iva_cliente || 5, 10), // 5 = Consumidor Final
-    };
-
-    logger.info(`[AFIP DEBUG] data enviado: ${JSON.stringify(data)}`);
-    const res = await afip.ElectronicBilling.createNextVoucher(data);
-
-    logger.info(`✅ CAE obtenido: ${res.CAE} (comprobante ${res.voucherNumber})`);
-    return {
-      cae: res.CAE,
-      vencimiento_cae: res.CAEFchVto,
-      numero_comprobante: res.voucherNumber || numero,
-    };
-
+    const resultado = await _emitirComprobante(datosFactura, cbteTipo);
+    logger.info(`✅ CAE obtenido: ${resultado.cae} (comprobante ${resultado.numero_comprobante})`);
+    return resultado;
   } catch (error) {
     logearError(error, 'solicitarCAE');
     throw new Error('No pude obtener el CAE de AFIP. Verificá los datos e intentá de nuevo.');
+  }
+}
+
+// ==========================================
+// EMITIR NOTA DE CRÉDITO — anula/corrige una factura ya emitida
+// ==========================================
+// datosNC: mismo shape que datosFactura, + comprobanteAsociado: {tipo, ptoVta, nro}
+// tipo/ptoVta/nro son los del comprobante ORIGINAL que se está anulando.
+export async function emitirNotaCredito(datosNC) {
+  try {
+    logger.info(`[AFIP DEBUG NC] Input: cuit=${datosNC.cuit}, ptoVta=${datosNC.punto_venta}, asociado=${JSON.stringify(datosNC.comprobanteAsociado)}`);
+    const cbteTipo = TIPO_NOTA_CREDITO[datosNC.tipo_comprobante || 'Factura C'];
+    const cbtesAsoc = [{
+      Tipo: datosNC.comprobanteAsociado.tipo,
+      PtoVta: datosNC.comprobanteAsociado.ptoVta,
+      Nro: datosNC.comprobanteAsociado.nro,
+      Cuit: parseInt(String(datosNC.cuit).replace(/\D/g, ''), 10),
+    }];
+    const resultado = await _emitirComprobante(datosNC, cbteTipo, cbtesAsoc);
+    logger.info(`✅ Nota de Crédito CAE obtenida: ${resultado.cae} (comprobante ${resultado.numero_comprobante})`);
+    return resultado;
+  } catch (error) {
+    logearError(error, 'emitirNotaCredito');
+    throw new Error('No pude obtener el CAE de la Nota de Crédito. Verificá los datos e intentá de nuevo.');
   }
 }
 

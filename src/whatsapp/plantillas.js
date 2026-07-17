@@ -23,6 +23,7 @@ const menuPrincipal = (nombre) => `👋 ¡Hola ${nombre}! ¿Qué necesitás hoy?
 1️⃣ Emitir una factura
 2️⃣ Ver mi última factura
 3️⃣ Ver mis datos
+4️⃣ Anular última factura (Nota de Crédito)
 
 También podés mandarme una 📸 foto o 🎤 audio con los datos y los proceso automáticamente.`;
 
@@ -453,6 +454,7 @@ Estamos para ayudarte. 😊`;
 const PALABRAS_FACTURA = ['factura', 'facturar', 'emitir', '1', 'nueva', 'hacer', 'crear'];
 const PALABRAS_ULTIMA = ['última', 'ultima', 'último', 'ultimo', 'ver', '2', 'historial', 'pasada'];
 const PALABRAS_DATOS = ['datos', 'cuenta', 'perfil', 'información', 'info', '3', 'mi'];
+const PALABRAS_NOTA_CREDITO = ['4', 'anular', 'nota', 'credito', 'crédito', 'notacredito'];
 const PALABRAS_CANCELAR = ['cancelar', 'cancel', 'salir', 'exit'];
 const PALABRAS_MENU = ['menu', 'menú', 'inicio', 'volver'];
 const PALABRAS_SI = ['si', 'sí', 'yes', 'ok', 'dale', 'confirmar', 'confirmo', 'correcto', 's', 'bueno'];
@@ -539,6 +541,7 @@ export {
   PALABRAS_FACTURA,
   PALABRAS_ULTIMA,
   PALABRAS_DATOS,
+  PALABRAS_NOTA_CREDITO,
   PALABRAS_CANCELAR,
   PALABRAS_MENU,
   PALABRAS_SI,

@@ -19,8 +19,14 @@ if (!fs.existsSync(FACTURAS_DIR)) {
   fs.mkdirSync(FACTURAS_DIR, { recursive: true });
 }
 
-const COD_COMPROBANTE = { 'Factura A': '001', 'Factura B': '006', 'Factura C': '011' };
-const LETRA_COMPROBANTE = { 'Factura A': 'A', 'Factura B': 'B', 'Factura C': 'C' };
+const COD_COMPROBANTE = {
+  'Factura A': '001', 'Factura B': '006', 'Factura C': '011',
+  'Nota de Crédito A': '003', 'Nota de Crédito B': '008', 'Nota de Crédito C': '013',
+};
+const LETRA_COMPROBANTE = {
+  'Factura A': 'A', 'Factura B': 'B', 'Factura C': 'C',
+  'Nota de Crédito A': 'A', 'Nota de Crédito B': 'B', 'Nota de Crédito C': 'C',
+};
 
 const MARGEN = 40;
 const ANCHO_PAGINA = 595.28; // A4 pt
@@ -77,8 +83,10 @@ export async function generarPDFFactura(datosFact) {
     doc.fontSize(20).font('Helvetica-Bold').text(letra, cajaTipoX, y + 15, { width: cajaTipoAncho, align: 'center' });
     doc.fontSize(6).font('Helvetica').text(`COD. ${cod}`, cajaTipoX - 5, y + 8 + cajaTipoAncho + 2, { width: cajaTipoAncho + 10, align: 'center' });
 
-    doc.fontSize(15).font('Helvetica-Bold')
-      .text('FACTURA', cajaTipoX + cajaTipoAncho + 10, y + 15, { width: colDerAncho - cajaTipoAncho - 30 });
+    const esNotaCredito = String(datosFact.tipo_comprobante || '').startsWith('Nota de Crédito');
+    const tituloComprobante = esNotaCredito ? 'NOTA DE CRÉDITO' : 'FACTURA';
+    doc.fontSize(esNotaCredito ? 11 : 15).font('Helvetica-Bold')
+      .text(tituloComprobante, cajaTipoX + cajaTipoAncho + 10, y + (esNotaCredito ? 18 : 15), { width: colDerAncho - cajaTipoAncho - 30 });
 
     doc.fontSize(8).font('Helvetica')
       .text(`Punto de Venta: ${String(datosFact.punto_venta || 1).padStart(5, '0')}   Comp. Nro: ${String(datosFact.numero_factura || '').split('-')[1] || ''}`,
@@ -214,7 +222,10 @@ function generarQRUrl(datosFact) {
 }
 
 function getTipoComprobante(tipoComprobante) {
-  const mapeo = { 'Factura A': 1, 'Factura B': 6, 'Factura C': 11 };
+  const mapeo = {
+    'Factura A': 1, 'Factura B': 6, 'Factura C': 11,
+    'Nota de Crédito A': 3, 'Nota de Crédito B': 8, 'Nota de Crédito C': 13,
+  };
   return mapeo[tipoComprobante] || 11;
 }
 
