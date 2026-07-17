@@ -29,9 +29,12 @@ export async function procesarImagenFactura(numeroDeTelefono, imagenPath, usuari
     const mimeType = ext === '.png' ? 'image/png' : 'image/jpeg';
 
     // Enviar a Gemini Vision
-    // gemini-1.5-flash fue retirado por Google (404 "not found for API version
-    // v1beta"), confirmado en logs de producción. 2.5-flash es el reemplazo GA.
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    // gemini-1.5-flash y luego gemini-2.5-flash fueron retirados por Google
+    // uno tras otro (confirmado en logs: 404 "not found" y después "no
+    // longer available to new users"). Usamos el alias 'gemini-flash-latest'
+    // que Google mantiene apuntando siempre al modelo flash vigente, para
+    // no perseguir esto de nuevo cada vez que deprecan una versión puntual.
+    const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
     const prompt = `Analiza esta imagen de comprobante/factura/recibo y extrae:
 - nombre_cliente: nombre de quien recibe la factura
 - documento: CUIT, DNI, o CF (consumidor final)
