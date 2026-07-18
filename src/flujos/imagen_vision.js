@@ -49,7 +49,12 @@ Devuelve SOLO JSON válido (sin markdown, sin texto extra):
 Si algo no está claro, omitilo. Sé preciso.`;
 
     const completion = await groq.chat.completions.create({
-      model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+      // llama-4-scout no está habilitado para esta cuenta (404 model_not_found,
+      // confirmado contra la API real). qwen/qwen3.6-27b SÍ está en la lista real
+      // de modelos de esta key. Es un modelo "thinking" — sin reasoning_effort:
+      // 'none' devuelve un <think>...</think> antes del JSON y se puede cortar
+      // por max_completion_tokens antes de llegar a la respuesta real.
+      model: 'qwen/qwen3.6-27b',
       messages: [
         {
           role: 'user',
@@ -59,6 +64,8 @@ Si algo no está claro, omitilo. Sé preciso.`;
           ],
         },
       ],
+      reasoning_effort: 'none',
+      reasoning_format: 'hidden',
       temperature: 0.2,
       max_completion_tokens: 500,
     });
