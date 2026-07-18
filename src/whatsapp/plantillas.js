@@ -201,9 +201,9 @@ Escribilo así: 20-12345678-9`;
 // FLUJO 2 — EMITIR FACTURA POR TEXTO
 // ==========================================
 
-const PEDIR_NOMBRE_CLIENTE = `📋 ¿A nombre de quién va la factura?
+const PEDIR_NOMBRE_CLIENTE = `📋 Decime a quién le facturás, qué y por cuánto.
 
-Escribí el nombre completo o razón social del cliente.`;
+Podés mandarlo todo junto, ej: "Facturale a Juan Pérez, diseño de logo, $15000" — o si preferís, empezá solo con el nombre del cliente.`;
 
 const PEDIR_DOCUMENTO_CLIENTE = `🔢 ¿CUIT o documento del cliente?
 

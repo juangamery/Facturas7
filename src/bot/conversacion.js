@@ -663,9 +663,12 @@ export async function procesarFacturaTexto(
       // Si no extrae nada, continúa con lógica normal de paso
     }
 
-    // Arranque de una factura nueva sin datos todavía: si el usuario ya
-    // facturó antes, ofrecer repetir esa factura en vez de preguntar todo
-    // de cero (memoria de conversación — no volver a pedir lo mismo).
+    // Arranque de una factura nueva sin datos todavía (Groq ya intentó
+    // extraer arriba y no encontró nada usable en el texto/trigger).
+    // Si el usuario ya facturó antes, ofrecer repetir esa factura. Si no,
+    // mostrar el template limpio directo — NUNCA mandar el texto disparador
+    // (ej: "1" del menú) a groqInterpretarCampo, que generaba una pregunta
+    // rara en vez del mensaje con el tip de "todo junto".
     if (paso === PASOS.FACTURA_NOMBRE_CLIENTE && Object.keys(datosActuales).length === 0) {
       const ultima = await obtenerUltimaFactura(usuario.id);
       if (ultima && !String(ultima.tipo_comprobante || '').startsWith('Nota de Crédito')) {
@@ -689,6 +692,8 @@ export async function procesarFacturaTexto(
         );
         return;
       }
+      await enviarTexto(numeroDeTelefono, PLANTILLAS.PEDIR_NOMBRE_CLIENTE);
+      return;
     }
 
     if (paso === PASOS.FACTURA_REPETIR_CONFIRMACION) {
