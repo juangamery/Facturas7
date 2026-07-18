@@ -180,6 +180,34 @@ export async function borrarConversacion(numeroDeTelefono) {
     .eq('numero_telefono', numeroDeTelefono);
 }
 
+// Memoria de conversación: guarda cada mensaje (usuario o bot) para dar
+// contexto real entre turnos, no solo los datos del paso actual.
+export async function guardarMensajeHistorial(numeroDeTelefono, rol, contenido) {
+  const ahora = Math.floor(Date.now() / 1000);
+  const { error } = await getDB()
+    .from('mensajes_historial')
+    .insert({ numero_telefono: numeroDeTelefono, rol, contenido: String(contenido).slice(0, 2000), creado_en: ahora });
+  if (error) {
+    // No cortar el flujo del bot por un fallo de logging de historial.
+    logger.warn(`guardarMensajeHistorial falla: ${error.message}`);
+  }
+}
+
+// Últimos N mensajes de la conversación, en orden cronológico.
+export async function obtenerHistorialReciente(numeroDeTelefono, limite = 12) {
+  const { data, error } = await getDB()
+    .from('mensajes_historial')
+    .select('rol, contenido, creado_en')
+    .eq('numero_telefono', numeroDeTelefono)
+    .order('creado_en', { ascending: false })
+    .limit(limite);
+  if (error) {
+    logger.warn(`obtenerHistorialReciente falla: ${error.message}`);
+    return [];
+  }
+  return (data || []).reverse();
+}
+
 export async function yaProcesado(messageID) {
   // BUGFIX: la tabla NO tiene columna 'id', solo 'message_id' y 'procesado_en'.
   // .select('id') daba error 400 → data null → siempre false → loop infinito.

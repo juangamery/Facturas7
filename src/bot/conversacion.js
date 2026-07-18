@@ -13,6 +13,8 @@ import {
   obtenerFacturasDeUsuario,
   obtenerUltimaFactura,
   obtenerFacturaPorID,
+  guardarMensajeHistorial,
+  obtenerHistorialReciente,
   getDB,
 } from '../db.js';
 import { logger, logearError } from '../logger.js';
@@ -56,6 +58,7 @@ export const PASOS = {
   FACTURA_CONCEPTO: 'factura_concepto',
   FACTURA_IMPORTE: 'factura_importe',
   FACTURA_CONFIRMACION: 'factura_confirmacion',
+  FACTURA_REPETIR_CONFIRMACION: 'factura_repetir_confirmacion',
 
   // Ver última factura
   VER_ULTIMA_FACTURA: 'ver_ultima_factura',
@@ -660,6 +663,51 @@ export async function procesarFacturaTexto(
       // Si no extrae nada, continúa con lógica normal de paso
     }
 
+    // Arranque de una factura nueva sin datos todavía: si el usuario ya
+    // facturó antes, ofrecer repetir esa factura en vez de preguntar todo
+    // de cero (memoria de conversación — no volver a pedir lo mismo).
+    if (paso === PASOS.FACTURA_NOMBRE_CLIENTE && Object.keys(datosActuales).length === 0) {
+      const ultima = await obtenerUltimaFactura(usuario.id);
+      if (ultima && !String(ultima.tipo_comprobante || '').startsWith('Nota de Crédito')) {
+        const items = (Array.isArray(ultima.items) && ultima.items.length > 0)
+          ? ultima.items
+          : [{ concepto: ultima.concepto, importe: ultima.importe }];
+        const datosRepetir = {
+          razon_social_cliente: ultima.razon_social_cliente,
+          documento_cliente: ultima.documento_cliente,
+          concepto: ultima.concepto,
+          importe: ultima.importe,
+          items,
+        };
+        await siguientePaso(numeroDeTelefono, PASOS.FACTURA_REPETIR_CONFIRMACION, datosRepetir);
+        const lineasItems = items.length > 1
+          ? items.map(i => `  - ${i.concepto}: $${i.importe}`).join('\n')
+          : `Concepto: ${items[0].concepto}, $${items[0].importe}`;
+        await enviarTexto(
+          numeroDeTelefono,
+          `📋 Tu última factura fue:\n\nCliente: ${ultima.razon_social_cliente}\n${lineasItems}\n\n¿Querés repetirla igual? (SI / NO — si es NO, contame los datos nuevos)`
+        );
+        return;
+      }
+    }
+
+    if (paso === PASOS.FACTURA_REPETIR_CONFIRMACION) {
+      if (esConfirmacionSI(texto)) {
+        await siguientePaso(numeroDeTelefono, PASOS.FACTURA_CONFIRMACION, datosActuales);
+        await enviarTexto(
+          numeroDeTelefono,
+          PLANTILLAS.resumenFactura({ tipo_comprobante: 'Factura C', ...datosActuales })
+        );
+      } else if (esConfirmacionNO(texto)) {
+        await siguientePaso(numeroDeTelefono, PASOS.FACTURA_NOMBRE_CLIENTE, {});
+        await enviarTexto(numeroDeTelefono, PLANTILLAS.PEDIR_NOMBRE_CLIENTE);
+      } else {
+        // Puede que en vez de SI/NO haya mandado los datos nuevos directo
+        await procesarFacturaTexto(numeroDeTelefono, texto, PASOS.FACTURA_NOMBRE_CLIENTE, {}, usuario);
+      }
+      return;
+    }
+
     if (paso === PASOS.FACTURA_NOMBRE_CLIENTE) {
       const interpretacion = await groqInterpretarCampo('nombre_cliente', PLANTILLAS.PEDIR_NOMBRE_CLIENTE, texto);
 
@@ -1174,6 +1222,7 @@ export async function procesarAudioConversacional(
       }
 
       logger.info(`✅ [AUDIO] Transcrito: ${transcripcion.substring(0, 100)}`);
+      guardarMensajeHistorial(numeroDeTelefono, 'user', `[audio] ${transcripcion}`).catch(() => {});
     } catch (groqError) {
       logger.error(`❌ [GROQ] Transcripción falla: ${groqError.message}`);
       await enviarTexto(numeroDeTelefono, `❌ Error transcribiendo: ${groqError.message}`);
@@ -1215,6 +1264,34 @@ export async function procesarAudioConversacional(
             numeroDeTelefono,
             PLANTILLAS.resumenFactura({ tipo_comprobante: 'Factura C', ...datos })
           );
+        } else if (Object.keys(datos).length === 0) {
+          // No extrajo nada del audio (ej: "quiero facturar" sin más datos):
+          // ofrecer repetir la última factura si existe, en vez de preguntar
+          // todo de cero.
+          const ultima = await obtenerUltimaFactura(usuario.id);
+          if (ultima && !String(ultima.tipo_comprobante || '').startsWith('Nota de Crédito')) {
+            const items = (Array.isArray(ultima.items) && ultima.items.length > 0)
+              ? ultima.items
+              : [{ concepto: ultima.concepto, importe: ultima.importe }];
+            const datosRepetir = {
+              razon_social_cliente: ultima.razon_social_cliente,
+              documento_cliente: ultima.documento_cliente,
+              concepto: ultima.concepto,
+              importe: ultima.importe,
+              items,
+            };
+            await siguientePaso(numeroDeTelefono, PASOS.FACTURA_REPETIR_CONFIRMACION, datosRepetir);
+            const lineasItems = items.length > 1
+              ? items.map(i => `  - ${i.concepto}: $${i.importe}`).join('\n')
+              : `Concepto: ${items[0].concepto}, $${items[0].importe}`;
+            await enviarTexto(
+              numeroDeTelefono,
+              `📋 Tu última factura fue:\n\nCliente: ${ultima.razon_social_cliente}\n${lineasItems}\n\n¿Querés repetirla igual? (SI / NO — si es NO, contame los datos nuevos)`
+            );
+          } else {
+            await siguientePaso(numeroDeTelefono, PASOS.FACTURA_NOMBRE_CLIENTE, datos);
+            await enviarTexto(numeroDeTelefono, PLANTILLAS.PEDIR_NOMBRE_CLIENTE);
+          }
         } else {
           const proximoPaso = PASOS[`FACTURA_${faltantes[0].toUpperCase()}`];
           const pregunta = PLANTILLAS[`PEDIR_${faltantes[0].toUpperCase()}`];

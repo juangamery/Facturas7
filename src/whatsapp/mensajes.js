@@ -4,6 +4,7 @@
 // Envío de texto, documentos (PDF) e imágenes vía WhatsApp Cloud API (Meta).
 
 import { logger, logearError } from '../logger.js';
+import { guardarMensajeHistorial } from '../db.js';
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
@@ -53,6 +54,10 @@ export async function enviarTexto(numero, texto) {
     }
 
     logger.info(`✅ Mensaje enviado. ID: ${data.messages?.[0]?.id}`);
+
+    // Memoria: registrar lo que el bot dijo (no corta el flujo si falla)
+    guardarMensajeHistorial(numero, 'bot', texto).catch(() => {});
+
     return data;
 
   } catch (error) {

@@ -10,6 +10,7 @@ import { verificarAcceso, enviarMensajeDeAccesoDenegado } from './acceso.js';
 import { enviarTexto } from '../whatsapp/mensajes.js';
 import * as PLANTILLAS from '../whatsapp/plantillas.js';
 import { logger, logearError } from '../logger.js';
+import { guardarMensajeHistorial } from '../db.js';
 import {
   obtenerEstado,
   mostrarMenuPrincipal,
@@ -59,6 +60,8 @@ export default async function procesarMensaje(mensaje, phoneID, displayPhoneNumb
 
     // PASO 2: Detectar tipo de mensaje
     if (mensaje.type === 'text') {
+      // Memoria: registrar lo que dijo el usuario (no corta el flujo si falla)
+      guardarMensajeHistorial(numeroDeTelefono, 'user', mensaje.text.body).catch(() => {});
       // Mensaje de texto plano
       await procesarTextoGenerico(numeroDeTelefono, mensaje.text.body, usuario);
 
@@ -197,7 +200,8 @@ async function procesarTextoGenerico(numeroDeTelefono, texto, usuario) {
       paso === PASOS.FACTURA_DOCUMENTO_CLIENTE ||
       paso === PASOS.FACTURA_CONCEPTO ||
       paso === PASOS.FACTURA_IMPORTE ||
-      paso === PASOS.FACTURA_CONFIRMACION
+      paso === PASOS.FACTURA_CONFIRMACION ||
+      paso === PASOS.FACTURA_REPETIR_CONFIRMACION
     ) {
       await procesarFacturaTexto(numeroDeTelefono, texto, paso, datosActuales, usuario);
       return;
