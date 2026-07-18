@@ -12,30 +12,45 @@ import { sinClave } from '../util/redaccion.js';
 const ACCESS_TOKEN = process.env.AFIPSDK_TOKEN;
 const EMPRESA_CUIT = process.env.AFIP_EMPRESA_CUIT;
 const EMPRESA_CLAVE = process.env.AFIP_EMPRESA_CLAVE_FISCAL;
+const EMPRESA_CERT_ALIAS = process.env.AFIP_EMPRESA_CERT_ALIAS;
 
 const soloDigitos = (v) => String(v || '').replace(/\D/g, '');
 
-// El cliente (cuit) delega wsfe al representante (empresa).
+// El cliente (cuit) delega wsfe a la empresa (delegate_to).
 export function paramsDelegar(cuitCliente, claveCliente, cuitEmpresa) {
   const cuit = soloDigitos(cuitCliente);
   return {
     cuit,
     username: cuit,
     password: claveCliente,
-    representante: soloDigitos(cuitEmpresa),
+    delegate_to: soloDigitos(cuitEmpresa),
     service: 'wsfe',
   };
 }
 
-// La empresa acepta la delegación que le hizo el cliente (representado).
+// La empresa acepta la delegación que le hizo el cliente (delegated_cuit).
 export function paramsAceptar(cuitEmpresa, claveEmpresa, cuitCliente) {
   const cuit = soloDigitos(cuitEmpresa);
   return {
     cuit,
     username: cuit,
     password: claveEmpresa,
-    representado: soloDigitos(cuitCliente),
+    delegated_cuit: soloDigitos(cuitCliente),
     service: 'wsfe',
+  };
+}
+
+// Vincula el servicio delegado al certificado de producción de la empresa.
+// Sin este paso la delegación queda aceptada pero no operativa contra WSFE.
+export function paramsAutorizarProd(cuitEmpresa, claveEmpresa, cuitCliente) {
+  const cuit = soloDigitos(cuitEmpresa);
+  return {
+    cuit,
+    username: cuit,
+    password: claveEmpresa,
+    alias: EMPRESA_CERT_ALIAS,
+    service: 'wsfe',
+    delegated_from: soloDigitos(cuitCliente),
   };
 }
 
@@ -47,7 +62,8 @@ export function paramsPuntoVenta(cuitCliente, claveCliente, numero) {
     username: cuit,
     password: claveCliente,
     numero,
-    sistema: 'RECE', // Factura Electrónica - Monotributo - Webservice
+    sistema: 'MAW', // Monotributo - Webservice
+    nombreFantasia: `Facturas7 - ${cuit}`,
   };
 }
 
@@ -72,6 +88,7 @@ export async function activarClienteRapido(cuitCliente, claveCliente, numeroPunt
   try {
     await correr(afip, 'delegate-web-service', paramsDelegar(cuitCliente, claveCliente, EMPRESA_CUIT));
     await correr(afip, 'accept-web-service-delegation', paramsAceptar(EMPRESA_CUIT, EMPRESA_CLAVE, cuitCliente));
+    await correr(afip, 'auth-web-service-prod', paramsAutorizarProd(EMPRESA_CUIT, EMPRESA_CLAVE, cuitCliente));
     await correr(afip, 'create-sales-point', paramsPuntoVenta(cuitCliente, claveCliente, numeroPuntoVenta));
     logger.info(`✅ Cliente ${soloDigitos(cuitCliente)} activado (rápido)`);
     return { ok: true, punto_venta: numeroPuntoVenta };
@@ -86,6 +103,7 @@ export async function activarClienteManual(cuitCliente, numeroPuntoVenta) {
   const afip = crearAfipAutomation();
   try {
     await correr(afip, 'accept-web-service-delegation', paramsAceptar(EMPRESA_CUIT, EMPRESA_CLAVE, cuitCliente));
+    await correr(afip, 'auth-web-service-prod', paramsAutorizarProd(EMPRESA_CUIT, EMPRESA_CLAVE, cuitCliente));
     logger.info(`✅ Cliente ${soloDigitos(cuitCliente)} activado (manual)`);
     return { ok: true, punto_venta: numeroPuntoVenta };
   } catch (error) {
