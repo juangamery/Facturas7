@@ -43,7 +43,18 @@ Archivos clave:
 
 Hoy **todas las facturas usan CAE mock** (`TEST-...`), nunca un CAE real emitido por AFIP.
 
-**Causa:** `arca_automation.js` genera un certificado **autofirmado con openssl** durante el onboarding. AFIP nunca reconoce ese certificado porque no pasó por el proceso real de delegación en ARCA — por eso `solicitarCAE` siempre tira 400 en `Afip.GetServiceTA` (el paso de autenticación, antes incluso de intentar facturar) y el código cae al fallback mock de homologación.
+**Causa (ya corregida en código, 2026-07-18):** `arca_automation.js` generaba un certificado **autofirmado con openssl** durante el onboarding. AFIP nunca reconocía ese certificado porque no pasó por el proceso real de delegación en ARCA — por eso `solicitarCAE` siempre tiraba 400 en `Afip.GetServiceTA` y el código caía al fallback mock de homologación.
+
+`src/facturacion/arca_automation.js` fue reescrito para usar las automations reales de AFIPSDK (`delegate-web-service`, `accept-web-service-delegation`, `auth-web-service-prod`, `create-sales-point`, `list-sales-points`), verificadas contra `https://afipsdk.com/docs/automations/` en esta sesión. Corrección importante sobre lo que decía este handoff antes: **falta un paso** entre "aceptar delegación" y "crear punto de venta" — `auth-web-service-prod` con `delegated_from: cuitCliente`, que vincula el servicio delegado al certificado de empresa. Sin eso la delegación queda aceptada pero wsfe no funciona. Ya está agregado en el código.
+
+**Esto todavía NO corrió contra ARCA real** — falta:
+1. Correr `scripts/generar-cert-empresa.js` (Paso 1, ya existía y está bien escrito) con la clave fiscal real de Facturas7 (CUIT 20347351300) para obtener `AFIP_EMPRESA_CERT`/`AFIP_EMPRESA_KEY` reales.
+2. Cargar en Render (y `.env` local si se prueba ahí): `AFIP_EMPRESA_CUIT`, `AFIP_EMPRESA_CLAVE_FISCAL`, `AFIP_EMPRESA_CERT_ALIAS=facturas7`, `AFIP_EMPRESA_CERT`, `AFIP_EMPRESA_KEY` (agregadas a `.env.example`, hoy vacías en `.env` local).
+3. **Confirmar el valor de `sistema` en `create-sales-point`** (`arca_automation.js`, constante `SISTEMA_PUNTO_VENTA`): hoy hardcodeado en `'MAW'` (Factura Electrónica - Monotributo - Web Services) porque `factura.js` solo emite Factura C de monotributo hoy. Si en algún momento se factura para Responsable Inscripto, probablemente haga falta `'RAW'` en cambio — no verificado contra una cuenta real, es una suposición marcada en el código.
+4. Probar el flujo completo con un CUIT real de prueba (no el de Facturas7) delegando de verdad.
+5. Cambiar `AFIPSDK_ENTORNO=produccion` (hoy homologación) y `production: true` ya está condicionado a eso en `factura.js`.
+
+De paso se encontró que `src/facturacion/onboarding.js` (usado solo por el flujo legacy `texto.js`) tiene parámetros de automation inventados/inválidos (`representante`/`representado` en vez de `delegate_to`/`delegated_cuit`, `sistema: 'RECE'` inválido) — bajo riesgo porque ese camino solo se activa si falta `GROQ_API_KEY`, quedó anotado como tarea aparte, no se tocó.
 
 ### La solución (investigada y confirmada contra la documentación real de AFIPSDK — no es un supuesto)
 
