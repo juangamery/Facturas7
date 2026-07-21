@@ -41,11 +41,20 @@ export async function manejarRegistro(numeroDeTelefono, texto, usuarioAcceso) {
   // Tolerante a texto extra en el mismo mensaje. Si además viene otra línea
   // que no es el CUIT, la tomamos como clave fiscal y saltamos directo a ARCA.
   if (paso === PASOS.PRE_SETUP_CUIT) {
-    const candidatos = texto.match(/\d[\d.\-\s]{8,}\d/g) || [];
-    let cuit = candidatos.map(c => c.replace(/\D/g, '')).find(d => d.length === 11);
-    if (!cuit) {
-      const soloDigitos = texto.replace(/\D/g, '');
-      if (soloDigitos.length === 11) cuit = soloDigitos;
+    // Busca línea por línea, no en el texto entero: \s en la regex también
+    // matchea el salto de línea, así que buscar sobre todo el texto junto
+    // cruza hacia la línea de la clave fiscal y arma un número de más de
+    // 11 dígitos (nunca matchea). Cada línea se evalúa por separado.
+    const lineasParaCuit = texto.split('\n').map(l => l.trim()).filter(Boolean);
+    let cuit;
+    for (const linea of lineasParaCuit) {
+      const candidatos = linea.match(/\d[\d.\-\s]{8,}\d/g) || [];
+      cuit = candidatos.map(c => c.replace(/\D/g, '')).find(d => d.length === 11);
+      if (!cuit) {
+        const soloDigitos = linea.replace(/\D/g, '');
+        if (soloDigitos.length === 11) cuit = soloDigitos;
+      }
+      if (cuit) break;
     }
     if (!cuit) {
       await enviarTexto(numeroDeTelefono, '❌ CUIT inválido. Debe tener 11 dígitos. Ej: 20-34735130-0');
