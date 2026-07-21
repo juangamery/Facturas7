@@ -50,10 +50,11 @@ async function correr(afip, nombre, params) {
     }
     return res.data;
   } catch (error) {
-    // axios no expone el body real del error en error.message — sin esto
-    // solo se ve "Request failed with status code 400" sin saber por qué.
-    const detalle = error.response?.data ? JSON.stringify(error.response.data) : null;
-    logger.error(`⚙️ Automatización ${nombre} falló. HTTP status=${error.response?.status}. Respuesta AFIPSDK: ${detalle}`);
+    // @afipsdk/afip.js reescribe el error de axios en su propio interceptor
+    // (ver node_modules/@afipsdk/afip.js/src/Afip.js) y copia el body como
+    // error.data/error.status/error.statusText directo en el error — NO
+    // como error.response.data (eso es axios crudo, acá ya no aplica).
+    logger.error(`⚙️ Automatización ${nombre} falló. HTTP status=${error.status} (${error.statusText}). Respuesta AFIPSDK: ${JSON.stringify(error.data)}`);
     throw error;
   }
 }
