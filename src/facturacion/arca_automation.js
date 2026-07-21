@@ -43,11 +43,19 @@ function crearAfipAutomation() {
 // terminó en 'complete' (CreateAutomation con wait=true ya espera el resultado).
 async function correr(afip, nombre, params) {
   logger.info(`⚙️ Automatización ${nombre} params=${JSON.stringify(sinClave(params))}`);
-  const res = await afip.CreateAutomation(nombre, params, true);
-  if (res?.status !== 'complete') {
-    throw new Error(`Automatización ${nombre} no completó (status=${res?.status})`);
+  try {
+    const res = await afip.CreateAutomation(nombre, params, true);
+    if (res?.status !== 'complete') {
+      throw new Error(`Automatización ${nombre} no completó (status=${res?.status})`);
+    }
+    return res.data;
+  } catch (error) {
+    // axios no expone el body real del error en error.message — sin esto
+    // solo se ve "Request failed with status code 400" sin saber por qué.
+    const detalle = error.response?.data ? JSON.stringify(error.response.data) : null;
+    logger.error(`⚙️ Automatización ${nombre} falló. HTTP status=${error.response?.status}. Respuesta AFIPSDK: ${detalle}`);
+    throw error;
   }
-  return res.data;
 }
 
 // Busca el primer número de punto de venta libre (1, 2, 3...) consultando
